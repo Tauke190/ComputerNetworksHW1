@@ -7,14 +7,18 @@
 #include <signal.h>
 
 #define PORT 9002
+#define DATA_PORT 9003
 #define BUFFER_SIZE 1024
 
 int network_socket;
 
 void setuser(int sock, char* username);
 void setpass(int sock, char* password);
+
 void send_file(int sock, char* filename);
 void receive_file(int sock, char* filename);
+int create_data_socket();
+void handleClientInput(int sock);
 
 void signal_handler(int signum) {
     // to create the semaphors and shared memory if the program is terminated intentionally with Ctrl + Z
@@ -94,39 +98,45 @@ int main(int argc, char *argv[]) {
 	//3rd: size of data to be received
 	//4th: optional flags , 0 default
 	char server_response[256]; //empty string
-	char client_command[20];
-	
-	printf("ftp-> Waiting for client command :");
-	while (1)
-	{
-		printf("\nftp->");
-		scanf("%s\n",client_command);
 
-		if(strcmp(client_command,"user") == 0){
-			char username[20];
-			scanf("%s",username);
-			setuser(network_socket,username);
-		}
-		if(strcmp(client_command,"pass") == 0){
-			char password[20];
-			scanf("%s",password);
-			setpass(network_socket,password);
-		}
-		if(strcmp(client_command,"put") == 0){
-			printf("Sending File.....");
-			send_file(network_socket,"text.txt");
-		}
-		if(strcmp(client_command,"get") == 0){
-			receive_file(network_socket,"text.txt");
-		}		
-	}
+	handleClientInput(network_socket);
+
 	// recv(network_socket , &server_response , sizeof(server_response),0);
 	// print out the data we get back
 	// printf("The server sent the data: %s\n" , server_response);
 	//close socket after we are done
 	close(network_socket);
-
 	return 0;
+}
+
+
+void handleClientInput(int sock){
+	char client_command[20];
+	printf("ftp-> Waiting for client command :");
+	while (1)
+	{
+		printf("\nftp->");
+		scanf("%s\n",client_command);
+		if(strcmp(client_command,"user") == 0){
+			char username[20];
+			scanf("%s",username);
+			printf("Settingusername File.....%s",username);
+			setuser(sock,username);
+		}
+		if(strcmp(client_command,"pass") == 0){
+			char password[20];
+			scanf("%s",password);
+			setpass(sock,password);
+		}
+		if(strcmp(client_command,"put") == 0){
+			printf("Sending File.....\n");
+			send_file(sock,"textclient.txt");
+		}
+		if(strcmp(client_command,"get") == 0){
+			printf("Getting File.....");
+			// receive_file(networksock_socket,"textserver.txt");
+		}
+	}
 }
 
 
@@ -150,34 +160,35 @@ void setpass(int sock, char* password) {
    printf("Server response: %s",server_response);
 }
 
-void send_file(int sock, char* filename) {
+// Handle File Transfer
+void send_file(int sock, char* filename){
 
-  char messagetype[20] = "f";
-  send(sock , messagetype , sizeof(messagetype),0);
+   char message[20] = "f";
+   char server_response[256]; //empty string
+   send(sock , message , sizeof(message),0);
+   recv(sock , &server_response , sizeof(server_response),0);
+   printf("Server response: %s",server_response);
 
-  char server_response[256]; //empty string
-  recv(sock , &server_response , sizeof(server_response),0);
-  printf("\nServer response: %s",server_response);
 
-  FILE *file = fopen("text.txt", "rb");
+   FILE *file = fopen(filename, "rb");
+	
+	if (file == NULL){
+		printf("\nFailed to open the file\n");
+		exit(EXIT_FAILURE);
+	}
 
-    if (file == NULL){
-        printf("\nFailed to open the file\n");
-        exit(EXIT_FAILURE);
-    }
+	char buffer[BUFFER_SIZE];
+	size_t bytes_read;
 
-    char buffer[BUFFER_SIZE];
-    size_t bytes_read;
-
-    while((bytes_read = fread(buffer, 1, BUFFER_SIZE, file)) > 0){
-        if (send(sock, buffer, bytes_read, 0) < 0){
-            printf("\nfailed to send the file");
-            break;
-        }
-    }
+	while((bytes_read = fread(buffer, 1, BUFFER_SIZE, file)) > 0){
+		if (send(sock, buffer, bytes_read, 0) < 0){
+			printf("\nfailed to send the file");
+			break;
+		}
+	}
 	const char *eof_marker = "EOF";
     send(sock, eof_marker, strlen(eof_marker), 0);
-	
+
     fclose(file);
     printf("\nFile uploaded successfully.\n");
 }
@@ -185,11 +196,13 @@ void send_file(int sock, char* filename) {
 //Download File from the server
 void receive_file(int sock, char* filename) {
 	char messagetype[20] = "s";
-  	send(sock , messagetype , sizeof(messagetype),0);
+  	send(sock , messagetype , sizeof(messagetype),0); // Send the message identifier
 
 	char server_response[256]; //empty string
   	recv(sock , &server_response , sizeof(server_response),0);
   	printf("\nServer response: %s",server_response);
+
+	send(sock , filename , sizeof(filename),0); // Send the file name;
 
     FILE *file = fopen(filename, "wb");
     if (file == NULL) {
