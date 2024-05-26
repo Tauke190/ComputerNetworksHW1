@@ -224,6 +224,18 @@ void handleClientInput(int sock){
 			send(sock , dirname , sizeof(dirname),0);
 		
 		}
+		if(strcmp(client_command,"quit") == 0){
+
+		   	char message[20] = "z";
+			send(sock , message , sizeof(message),0);
+
+			char server_response[256]; //empty string
+			recv(sock , &server_response , sizeof(server_response),0);
+			printf("Server response: %s",server_response);
+
+			break;
+		
+		}
 	}
 }
 
@@ -249,7 +261,6 @@ void setpass(int sock, char* password) {
 // Handle File Transfer
 void send_file(int sock, char* filename){
 
-  
    char server_response[256]; //empty string
    char newfilename[20];
    strcpy(newfilename,filename);

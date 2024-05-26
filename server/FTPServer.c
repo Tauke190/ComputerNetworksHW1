@@ -47,7 +47,6 @@ void signal_handler(int signum) {
 
 int main()
 {
-	
 	signal(SIGINT, signal_handler);
     signal(SIGTERM, signal_handler);
 	char *custom_ip = "127.0.0.1"; // Custom IP address
@@ -106,14 +105,12 @@ int main()
     
 
 	//now after listen, socket is a fully functional listening socket
-
 	//once we are able to listen to connections, we can accept connections
 	//when we accept a connection, what we get back is the client socket that we will write to	
 
 	int addrlen = sizeof(server_address);	
-
 	int client_socket;
-	
+
 	//In the call to accept(), the server is put to sleep and when there is an incoming client request, then the function accept() wakes up and returns the socket descriptor representing the client socket
 	//1st: The socket that has been created with socket(), bound to a local address with bind(), and is listening for connections after a listen().
 	//2nd: A pointer to the sockaddr structure
@@ -142,16 +139,16 @@ void handleClient(int sock){
 	char server_message_2[256] = "530 Not logged in.";
 	char server_message_3[256] = "230 User logged in,";
 	char server_message_4[256] = "530 Not logged in.";
-
 	char server_message_5[256] = "Valid User";
 	char server_message_6[256] = "Valid User";
 	char server_message_7[256] = "User not authenticated!";
+	char server_message_8[256] = "221 Service closing control connection";
+
 	while (1) {
 		recv(sock , &client_message , sizeof(client_message),0);
 		if(strcmp(client_message, "")){
 			if(client_message[0]=='u'){
 				printf("Server got the client message (type : %c): %s\n",client_message[0],client_message);
-
 				char username[20];
 				copyExcludingFirstCharacter(client_message,username);
 				if(checkUsernameExists(username)){
@@ -189,7 +186,6 @@ void handleClient(int sock){
 					printf("User not authenticated\n");
 					send(sock , &server_message_7 , sizeof(server_message_7),0);
 				}
-			
 			}
 			if(client_message[0]=='s'){
 				if(authenticated){
@@ -204,7 +200,7 @@ void handleClient(int sock){
 					send(sock , &server_message_7 , sizeof(server_message_7),0);
 				}
 			}
-			if(client_message[0]=='l'){
+			if(client_message[0]=='l'){ // cd (list)
 				if(authenticated){
 					char *files = listFilesInCurrentDirectory();
 					size_t length = strlen(files);
@@ -217,7 +213,7 @@ void handleClient(int sock){
 					send(sock , &server_message_7 , sizeof(server_message_7),0);
 				}
 			}
-			if(client_message[0]=='t'){
+			if(client_message[0]=='t'){ // cd (pwd)
 				if(authenticated){
 					char *pathname = getCurrentDirectoryPath();
 					size_t length = strlen(pathname);
@@ -231,11 +227,20 @@ void handleClient(int sock){
 					send(sock , &server_message_7 , sizeof(server_message_7),0);
 				}
 			}
-			if(client_message[0]=='q'){
+			if(client_message[0]=='q'){ // cd (server)
 			   if(authenticated){
 					send(sock , &server_message_6 , sizeof(server_message_6),0);
 					recv(sock , &client_message , sizeof(client_message),0);
 					handle_cd_command(client_message);
+			   }
+			   else{
+				   printf("User not authenticated\n");
+				   send(sock , &server_message_7 , sizeof(server_message_7),0);
+			   }
+			}
+			if(client_message[0]=='z'){ // cd (server)
+			   if(authenticated){
+					send(sock , &server_message_8 , sizeof(server_message_8),0);
 			   }
 			   else{
 				   printf("User not authenticated\n");
@@ -453,15 +458,12 @@ char* listFilesInCurrentDirectory() {
     }
     result[0] = '\0'; // Start with an empty string
 
-    // Open the current directory
     dir = opendir(".");
     if (dir == NULL) {
         perror("Unable to open directory");
         free(result);
         exit(EXIT_FAILURE);
     }
-
-    // Read the directory entries
     while ((entry = readdir(dir)) != NULL) {
         size_t entry_length = strlen(entry->d_name) + 1; // +1 for the newline character
         // Check if we need more space
@@ -474,13 +476,10 @@ char* listFilesInCurrentDirectory() {
                 exit(EXIT_FAILURE);
             }
         }
-        // Append the entry name and a newline character to the result string
         strcat(result, entry->d_name);
         strcat(result, "\n");
         buffer_length += entry_length;
     }
-
-    // Close the directory
     closedir(dir);
 
     return result;
@@ -492,10 +491,8 @@ char* getCurrentDirectoryPath() {
         perror("Unable to allocate buffer");
         return NULL;
     }
-
-    // Get the current working directory
     if (getcwd(buffer, PATH_MAX) != NULL) {
-        return buffer;  // Caller is responsible for freeing this buffer
+        return buffer;
     } else {
         perror("getcwd() error");
         free(buffer);
