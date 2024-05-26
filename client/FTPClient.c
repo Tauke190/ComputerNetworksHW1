@@ -24,6 +24,7 @@ int create_data_socket();
 void handleClientInput(int sock);
 void listFilesInCurrentDirectory();
 void displayCurrentDirectory();
+void handle_cd_command();
 
 
 char* const authenticationMsg = "230 User logged in, proceed.";
@@ -204,6 +205,25 @@ void handleClientInput(int sock){
 		if(strcmp(client_command,"!pwd") == 0){
 			displayCurrentDirectory();
 		}
+		if(strcmp(client_command,"!cd") == 0){
+			char directory_name[20];
+			scanf("%s",directory_name);
+			handle_cd_command(directory_name);
+		}
+		if(strcmp(client_command,"cd") == 0){
+
+		   	char message[20] = "q";
+			send(sock , message , sizeof(message),0);
+
+			char server_response[256]; //empty string
+			recv(sock , &server_response , sizeof(server_response),0);
+			printf("Server response: %s",server_response);
+
+			char dirname[20];
+			scanf("%s",dirname);
+			send(sock , dirname , sizeof(dirname),0);
+		
+		}
 	}
 }
 
@@ -277,7 +297,7 @@ void send_file(int sock, char* filename){
 void send_to_data_socket(int data_sock, const char *filename){
 	FILE *file = fopen(filename, "rb");
 
-   if (file == NULL){
+    if (file == NULL){
 		printf("\nFailed to open the file\n");
 		exit(EXIT_FAILURE);
     }
@@ -397,9 +417,16 @@ void listFilesInCurrentDirectory() {
 void displayCurrentDirectory() {
     char buffer[1024]; // Buffer to hold the path
     if (getcwd(buffer, sizeof(buffer)) != NULL) {
-        printf("Client path: %s\n", buffer);
+        printf("Current Directory: %s\n", buffer);
     } else {
         perror("getcwd() error");
     }
+}
+
+void handle_cd_command(char *command) {
+    if (chdir(command) < 0) {
+        perror("chdir failed");
+    }
+	displayCurrentDirectory();
 }
 

@@ -27,6 +27,7 @@ void send_files(int data_sock, char* filename);
 char* listFilesInCurrentDirectory();
 int create_data_socket();
 char* getCurrentDirectoryPath();
+void handle_cd_command(char *command);
 
 bool checkUsernameExists(const char* username);
 bool checkPasswordExists(const char* password);
@@ -43,7 +44,6 @@ void signal_handler(int signum) {
         exit(EXIT_SUCCESS);
     }
 }
-
 
 int main()
 {
@@ -230,6 +230,17 @@ void handleClient(int sock){
 					printf("User not authenticated\n");
 					send(sock , &server_message_7 , sizeof(server_message_7),0);
 				}
+			}
+			if(client_message[0]=='q'){
+			   if(authenticated){
+					send(sock , &server_message_6 , sizeof(server_message_6),0);
+					recv(sock , &client_message , sizeof(client_message),0);
+					handle_cd_command(client_message);
+			   }
+			   else{
+				   printf("User not authenticated\n");
+				   send(sock , &server_message_7 , sizeof(server_message_7),0);
+			   }
 			}
 		}
 		client_message[0]= '\0';
@@ -492,4 +503,8 @@ char* getCurrentDirectoryPath() {
     }
 }
 
-
+void handle_cd_command(char *command) {
+    if (chdir(command) < 0) {
+        perror("chdir failed");
+    }
+}
