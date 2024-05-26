@@ -338,7 +338,7 @@ void send_to_data_socket(int data_sock, const char *filename){
 
 //Download File from the server
 void receive_file(int sock, const char* filename) {
-	
+
 	char newfilename[20];
 	strcpy(newfilename,filename);
 
@@ -348,9 +348,8 @@ void receive_file(int sock, const char* filename) {
   	recv(sock , &server_response , sizeof(server_response),0);
   	printf("\nServer response: %s",server_response);
 
-
 	// Needs to check if the file exists in the server
-	if(strcmp(server_response,"File Found")==0){
+	if(strcmp(server_response,"File Found") == 0 ){
 	// Establish connection to the data socket
 
 		struct sockaddr_in server_addr;
@@ -377,7 +376,6 @@ void receive_file(int sock, const char* filename) {
 			exit(EXIT_FAILURE);
 		}
 
-		
 		receive_from_data_socket(data_sock, filename);
 
 		recv(sock , &server_response , sizeof(server_response),0);
@@ -399,7 +397,7 @@ void receive_from_data_socket(int data_sock, const char* filename) {
 
     char buffer[BUFFER_SIZE];
     ssize_t bytes_received;
-	
+
     while ((bytes_received = recv(data_sock, buffer, BUFFER_SIZE, 0)) > 0) {
         fwrite(buffer, 1, bytes_received, file);
     }
@@ -458,4 +456,3 @@ bool file_exists(const char *filename) {
     }
     return false;
 }
-

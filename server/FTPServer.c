@@ -334,14 +334,12 @@ void receive_files(int data_sock, char* filename){
 }
 
 void send_files(int data_sock, char* filename) {
-
-  FILE *file = fopen(filename, "rb");
-
+    FILE *file = fopen(filename, "rb");
     if (file == NULL){
         printf("\nFailed to open the file\n");
         exit(EXIT_FAILURE);
     }
-
+	
     char buffer[BUFFER_SIZE];
     size_t bytes_read;
 
@@ -351,7 +349,7 @@ void send_files(int data_sock, char* filename) {
             break;
         }
     }
-	
+
     fclose(file);
 	close(data_sock); // Close the data socket
     printf("\nFile sent to client successfully successfully.\n");
