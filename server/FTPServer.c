@@ -311,7 +311,7 @@ void receive_files(int data_sock, char* filename){
 		if (strncmp(buffer, "EOF", 3) == 0) {
             break;
         }
-		fwrite(buffer, 1, bytes_received, stdout);
+		// fwrite(buffer, 1, bytes_received, stdout);
         fwrite(buffer, 1, bytes_received, file);
     }
 
@@ -481,7 +481,6 @@ char* listFilesInCurrentDirectory() {
         buffer_length += entry_length;
     }
     closedir(dir);
-
     return result;
 }
 

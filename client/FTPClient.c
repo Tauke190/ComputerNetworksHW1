@@ -6,6 +6,9 @@
 #include <sys/socket.h>
 #include <signal.h>
 #include <dirent.h>
+#include <stdbool.h>
+
+
 
 #define PORT 9002
 #define DATA_PORT 9003
@@ -15,7 +18,6 @@ int network_socket;
 
 void setuser(int sock, char* username);
 void setpass(int sock, char* password);
-
 void send_file(int sock, char* filename);
 void receive_file(int sock, const char* filename);
 void send_to_data_socket(int data_sock, const char *filename);
@@ -25,6 +27,7 @@ void handleClientInput(int sock);
 void listFilesInCurrentDirectory();
 void displayCurrentDirectory();
 void handle_cd_command();
+bool file_exists(const char *filename);
 
 
 char* const authenticationMsg = "230 User logged in, proceed.";
@@ -139,20 +142,27 @@ void handleClientInput(int sock){
 		if(strcmp(client_command,"put") == 0){
 			char filename[20];
 			scanf("%s",filename);
-			printf("Checking Authentication.....\n");
-			
-			char message[20] = "f";
-			char server_response[256]; //empty string
-			send(sock , message , sizeof(message),0);
-			recv(sock , &server_response , sizeof(server_response),0);
-   		
-			printf("Server response: %s",server_response);
-			if(strcmp(server_response,"Valid User")==0){
-				send_file(sock,filename);
+
+
+			if(file_exists(filename)){
+				printf("Checking Authentication.....\n");
+				char message[20] = "f";
+				char server_response[256]; //empty string
+				send(sock , message , sizeof(message),0);
+				recv(sock , &server_response , sizeof(server_response),0);
+
+
+				printf("Server response: %s",server_response);
+				if(strcmp(server_response,"Valid User")==0){
+					send_file(sock,filename);
+				}
+				else{
+
+				}			
 			}
 			else{
-
-			}			
+				printf("File does not exists, please enter a valid fileName\n");
+			}
 		}
 		if(strcmp(client_command,"get") == 0){
 			char filename[20];
@@ -391,7 +401,7 @@ void receive_from_data_socket(int data_sock, const char* filename) {
 		if (strncmp(buffer, "EOF", 3) == 0) {
             break;
         }
-		fwrite(buffer, 1, bytes_received, stdout);
+		// fwrite(buffer, 1, bytes_received, stdout);
         fwrite(buffer, 1, bytes_received, file);
     }
 
@@ -438,5 +448,15 @@ void handle_cd_command(char *command) {
         perror("chdir failed");
     }
 	displayCurrentDirectory();
+}
+
+
+bool file_exists(const char *filename) {
+    FILE *file = fopen(filename, "r");
+    if (file) {
+        fclose(file);
+        return true;
+    }
+    return false;
 }
 
