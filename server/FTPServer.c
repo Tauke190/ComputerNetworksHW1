@@ -10,6 +10,7 @@
 #include <dirent.h>
 #include <limits.h> 
 
+
 #define PORT 9002
 #define DATA_PORT 9003
 #define BUFFER_SIZE 1024
@@ -28,6 +29,7 @@ char* listFilesInCurrentDirectory();
 int create_data_socket();
 char* getCurrentDirectoryPath();
 void handle_cd_command(char *command);
+bool file_exists(const char *filename);
 
 bool checkUsernameExists(const char* username);
 bool checkPasswordExists(const char* password);
@@ -47,6 +49,7 @@ void signal_handler(int signum) {
 
 int main()
 {
+	authenticated = true;
 	signal(SIGINT, signal_handler);
     signal(SIGTERM, signal_handler);
 	char *custom_ip = "127.0.0.1"; // Custom IP address
@@ -102,8 +105,8 @@ int main()
 	}
 	 else
     	printf("Server: socket LISTEN success..\n");
-    
 
+	
 	//now after listen, socket is a fully functional listening socket
 	//once we are able to listen to connections, we can accept connections
 	//when we accept a connection, what we get back is the client socket that we will write to	
@@ -143,6 +146,7 @@ void handleClient(int sock){
 	char server_message_6[256] = "Valid User";
 	char server_message_7[256] = "User not authenticated!";
 	char server_message_8[256] = "221 Service closing control connection";
+	char server_message_9[256] = "File Found";
 
 	while (1) {
 		recv(sock , &client_message , sizeof(client_message),0);
@@ -188,12 +192,21 @@ void handleClient(int sock){
 				}
 			}
 			if(client_message[0]=='s'){
+				
 				if(authenticated){
 					printf("Sending the file to client: %s\n","..................");
-					send(sock , &server_message_6 , sizeof(server_message_6),0);
-					recv(sock , &client_message , sizeof(client_message),0);
+					send(sock , &server_message_6 , sizeof(server_message_6),0); // Send Valid user
+					recv(sock , &client_message , sizeof(client_message),0); // Filename received
 					printf("Filename:%s\n",client_message);
-					handleDataSocket(sock,client_message,true); // Client Download to server
+
+					if(file_exists(client_message)){
+						send(sock , &server_message_9 , sizeof(server_message_9),0);
+						handleDataSocket(sock,client_message,true); // Client Download to server
+					}
+					else{
+						char msg[20] = "File does not exists";
+						send(sock , &msg , sizeof(msg),0);
+					}
 				}
 				else{
 					printf("User not authenticated\n");
@@ -273,10 +286,10 @@ void handleDataSocket(int sock ,char *filename, bool value) { // True : Upload ,
 	}
 
 	if(value == true){
-		handleFileDownload(data_client_sock,filename);
+		handleFileDownload(data_client_sock,filename); // Download from server
 	}
 	else{
-		handleFileUpload(data_client_sock,filename);
+		handleFileUpload(data_client_sock,filename); // Upload to server
 	}
 
 	send(sock, "150 Closing data connection\r\n", 29, 0);
@@ -285,17 +298,18 @@ void handleDataSocket(int sock ,char *filename, bool value) { // True : Upload ,
 }
 
 
-
+//Client downloads from the server
+void handleFileDownload(int data_sock , char *filename){
+	send_files(data_sock,filename);
+}
 
 //Client uploads to the server
 void handleFileUpload(int data_sock , char *filename){
 	receive_files(data_sock,filename);
 }
 
-//Client downloads from the server
-void handleFileDownload(int data_sock , char *filename){
-	send_files(data_sock,filename);
-}
+
+
 
 void receive_files(int data_sock, char* filename){
     FILE *file = fopen(filename, "wb");
@@ -308,10 +322,6 @@ void receive_files(int data_sock, char* filename){
     ssize_t bytes_received;
 
     while ((bytes_received = recv(data_sock, buffer, BUFFER_SIZE, 0)) > 0) {
-		if (strncmp(buffer, "EOF", 3) == 0) {
-            break;
-        }
-		// fwrite(buffer, 1, bytes_received, stdout);
         fwrite(buffer, 1, bytes_received, file);
     }
 
@@ -341,10 +351,9 @@ void send_files(int data_sock, char* filename) {
             break;
         }
     }
-	const char *eof_marker = "EOF";
-    send(data_sock, eof_marker, strlen(eof_marker), 0);
 	
     fclose(file);
+	close(data_sock); // Close the data socket
     printf("\nFile sent to client successfully successfully.\n");
 }
 
@@ -503,4 +512,13 @@ void handle_cd_command(char *command) {
     if (chdir(command) < 0) {
         perror("chdir failed");
     }
+}
+
+bool file_exists(const char *filename) {
+    FILE *file = fopen(filename, "r");
+    if (file) {
+        fclose(file);
+        return true;
+    }
+    return false;
 }

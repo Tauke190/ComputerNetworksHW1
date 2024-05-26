@@ -179,7 +179,7 @@ void handleClientInput(int sock){
 				receive_file(sock,filename);
 			}
 			else {
-			
+
 			}		
 		}
 		if(strcmp(client_command,"list") == 0){
@@ -331,9 +331,8 @@ void send_to_data_socket(int data_sock, const char *filename){
 			break;
 		}
 	}
-	const char *eof_marker = "EOF";
-    send(data_sock, eof_marker, strlen(eof_marker), 0);
     fclose(file);
+	close(data_sock); // Close the data socket
     printf("\nFile uploaded successfully.\n");
 }
 
@@ -349,42 +348,46 @@ void receive_file(int sock, const char* filename) {
   	recv(sock , &server_response , sizeof(server_response),0);
   	printf("\nServer response: %s",server_response);
 
-   // Establish connection to the data socket
-
-   struct sockaddr_in server_addr;
-   server_addr.sin_family = AF_INET;
-   server_addr.sin_port = htons(DATA_PORT);
-   inet_pton(AF_INET, "127.0.0.1", &server_addr.sin_addr);
-
-   int data_sock;
-    // Create a socket for the data connection
-    data_sock = socket(AF_INET, SOCK_STREAM, 0);
-    if (data_sock < 0) {
-        perror("Socket creation failed");
-        close(sock);
-        exit(EXIT_FAILURE);
-    }
-
-    server_addr.sin_port = htons(DATA_PORT);
-
-    // Connect to the server data port
-    if (connect(data_sock, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
-        perror("Connect to data port failed");
-        close(data_sock);
-        close(sock);
-        exit(EXIT_FAILURE);
-    }
 
 	// Needs to check if the file exists in the server
-    receive_from_data_socket(data_sock, filename);
+	if(strcmp(server_response,"File Found")==0){
+	// Establish connection to the data socket
 
-	recv(sock , &server_response , sizeof(server_response),0);
-    printf("\nServer response: %s",server_response);
+		struct sockaddr_in server_addr;
+		server_addr.sin_family = AF_INET;
+		server_addr.sin_port = htons(DATA_PORT);
+		inet_pton(AF_INET, "127.0.0.1", &server_addr.sin_addr);
 
+		int data_sock;
+			// Create a socket for the data connection
+		data_sock = socket(AF_INET, SOCK_STREAM, 0);
+		if (data_sock < 0) {
+			perror("Socket creation failed");
+			close(sock);
+			exit(EXIT_FAILURE);
+		}
+
+		server_addr.sin_port = htons(DATA_PORT);
+
+		// Connect to the server data port
+		if (connect(data_sock, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
+			perror("Connect to data port failed");
+			close(data_sock);
+			close(sock);
+			exit(EXIT_FAILURE);
+		}
+
+		
+		receive_from_data_socket(data_sock, filename);
+
+		recv(sock , &server_response , sizeof(server_response),0);
+		printf("\nServer response: %s",server_response);
+		close(data_sock);
+	}
+	else{
+		printf("\nFile not found in server : %s",server_response);
+	}
     // Close the data connection
-    close(data_sock);
-
-  
 }
 
 void receive_from_data_socket(int data_sock, const char* filename) {
@@ -396,12 +399,8 @@ void receive_from_data_socket(int data_sock, const char* filename) {
 
     char buffer[BUFFER_SIZE];
     ssize_t bytes_received;
-
+	
     while ((bytes_received = recv(data_sock, buffer, BUFFER_SIZE, 0)) > 0) {
-		if (strncmp(buffer, "EOF", 3) == 0) {
-            break;
-        }
-		// fwrite(buffer, 1, bytes_received, stdout);
         fwrite(buffer, 1, bytes_received, file);
     }
 
