@@ -232,7 +232,6 @@ void handleClientInput(int sock){
 			char server_response[256]; //empty string
 			recv(sock , &server_response , sizeof(server_response),0);
 			printf("Server response: %s",server_response);
-
 			break;
 		
 		}
