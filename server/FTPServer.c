@@ -7,6 +7,8 @@
 #include <sys/socket.h>
 #include <signal.h>
 #include <stdbool.h>
+#include <dirent.h>
+#include <limits.h> 
 
 #define PORT 9002
 #define DATA_PORT 9003
@@ -22,7 +24,9 @@ void handleFileDownload(int sock , char *filename);
 void handleFileUpload(int sock , char *filename);
 void receive_files(int data_sock, char* filename);
 void send_files(int data_sock, char* filename);
+char* listFilesInCurrentDirectory();
 int create_data_socket();
+char* getCurrentDirectoryPath();
 
 bool checkUsernameExists(const char* username);
 bool checkPasswordExists(const char* password);
@@ -194,6 +198,33 @@ void handleClient(int sock){
 					recv(sock , &client_message , sizeof(client_message),0);
 					printf("Filename:%s\n",client_message);
 					handleDataSocket(sock,client_message,true); // Client Download to server
+				}
+				else{
+					printf("User not authenticated\n");
+					send(sock , &server_message_7 , sizeof(server_message_7),0);
+				}
+			}
+			if(client_message[0]=='l'){
+				if(authenticated){
+					char *files = listFilesInCurrentDirectory();
+					size_t length = strlen(files);
+					files[length] = '\0';
+					send(sock , files , length,0);
+					free(files); // Don't forget to free the allocated memory
+				}
+				else{
+					printf("User not authenticated\n");
+					send(sock , &server_message_7 , sizeof(server_message_7),0);
+				}
+			}
+			if(client_message[0]=='t'){
+				if(authenticated){
+					char *pathname = getCurrentDirectoryPath();
+					size_t length = strlen(pathname);
+
+					pathname[length] = '\0';
+					send(sock , pathname , length,0);
+					free(pathname); // Don't forget to free the allocated memory
 				}
 				else{
 					printf("User not authenticated\n");
@@ -398,3 +429,67 @@ void copyExcludingFirstCharacter(const char* original, char* result) {
     // Copy the rest of the string to the result
     strcpy(result, src);
 };
+
+char* listFilesInCurrentDirectory() {
+    DIR *dir;
+    struct dirent *entry;
+    size_t buffer_size = 1024;
+    size_t buffer_length = 0;
+    char *result = malloc(buffer_size);
+    if (!result) {
+        perror("Unable to allocate memory");
+        exit(EXIT_FAILURE);
+    }
+    result[0] = '\0'; // Start with an empty string
+
+    // Open the current directory
+    dir = opendir(".");
+    if (dir == NULL) {
+        perror("Unable to open directory");
+        free(result);
+        exit(EXIT_FAILURE);
+    }
+
+    // Read the directory entries
+    while ((entry = readdir(dir)) != NULL) {
+        size_t entry_length = strlen(entry->d_name) + 1; // +1 for the newline character
+        // Check if we need more space
+        if (buffer_length + entry_length + 1 > buffer_size) { // +1 for the null terminator
+            buffer_size *= 2; // Double the buffer size
+            result = realloc(result, buffer_size);
+            if (!result) {
+                perror("Unable to reallocate memory");
+                closedir(dir);
+                exit(EXIT_FAILURE);
+            }
+        }
+        // Append the entry name and a newline character to the result string
+        strcat(result, entry->d_name);
+        strcat(result, "\n");
+        buffer_length += entry_length;
+    }
+
+    // Close the directory
+    closedir(dir);
+
+    return result;
+}
+
+char* getCurrentDirectoryPath() {
+    char *buffer = malloc(PATH_MAX);
+    if (buffer == NULL) {
+        perror("Unable to allocate buffer");
+        return NULL;
+    }
+
+    // Get the current working directory
+    if (getcwd(buffer, PATH_MAX) != NULL) {
+        return buffer;  // Caller is responsible for freeing this buffer
+    } else {
+        perror("getcwd() error");
+        free(buffer);
+        return NULL;
+    }
+}
+
+

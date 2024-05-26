@@ -5,6 +5,7 @@
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #include <signal.h>
+#include <dirent.h>
 
 #define PORT 9002
 #define DATA_PORT 9003
@@ -21,6 +22,8 @@ void send_to_data_socket(int data_sock, const char *filename);
 void receive_from_data_socket(int sock, const char* filename);
 int create_data_socket();
 void handleClientInput(int sock);
+void listFilesInCurrentDirectory();
+void displayCurrentDirectory();
 
 
 char* const authenticationMsg = "230 User logged in, proceed.";
@@ -121,7 +124,7 @@ void handleClientInput(int sock){
 	while (1)
 	{
 		printf("\nftp->");
-		scanf("%s\n",client_command);
+		scanf("%s",client_command);
 		if(strcmp(client_command,"user") == 0){
 			char username[20];
 			scanf("%s",username);
@@ -147,7 +150,7 @@ void handleClientInput(int sock){
 				send_file(sock,filename);
 			}
 			else{
-				
+
 			}			
 		}
 		if(strcmp(client_command,"get") == 0){
@@ -160,15 +163,46 @@ void handleClientInput(int sock){
   			send(sock , messagetype , sizeof(messagetype),0); // Send the message identifier
 			recv(sock , &server_response , sizeof(server_response),0);
 
-
 			printf("Server response: %s",server_response);
 			if(strcmp(server_response,"Valid User")==0){
 				receive_file(sock,filename);
 			}
-			else{
+			else {
 			
 			}		
+		}
+		if(strcmp(client_command,"list") == 0){
+			
+		char message[20] = "l";
+		char buffer[BUFFER_SIZE] = {0};
 
+		send(sock , message , sizeof(message),0);
+		ssize_t valread = read(sock, buffer, BUFFER_SIZE - 1);  // Read into buffer, leaving space for null terminator
+		if (valread > 0) {
+			buffer[valread] = '\0';  // Ensure the string is null-terminated
+			printf("Server Directory Path: %s\n", buffer);
+		} else {
+			printf("Failed to read from socket\n");
+		}
+		}
+		if(strcmp(client_command,"!list") == 0){
+			listFilesInCurrentDirectory();
+		}
+		if(strcmp(client_command,"pwd") == 0){
+			char message[20] = "t";
+			char buffer[BUFFER_SIZE] = {0};
+			
+			send(sock , message , sizeof(message),0);
+			ssize_t valread = read(sock, buffer, BUFFER_SIZE - 1);  // Read into buffer, leaving space for null terminator
+			if (valread > 0) {
+				buffer[valread] = '\0';  // Ensure the string is null-terminated
+				printf("Server Directory Path: %s\n", buffer);
+			} else {
+				printf("Failed to read from socket\n");
+			}
+		}
+		if(strcmp(client_command,"!pwd") == 0){
+			displayCurrentDirectory();
 		}
 	}
 }
@@ -183,7 +217,6 @@ void setuser(int sock, char* username) {
 }
 
 void setpass(int sock, char* password) {
-
    char new_password[20] = "p";
    strcat(new_password,password);
    char server_response[256]; //empty string
@@ -200,13 +233,9 @@ void send_file(int sock, char* filename){
    char server_response[256]; //empty string
    char newfilename[20];
    strcpy(newfilename,filename);
-
- 
    send(sock , newfilename , sizeof(newfilename),0); // Send the file name;
-
    recv(sock , &server_response , sizeof(server_response),0);
    printf("\nServer response: %s",server_response);
-
 
    // Establish connection to the data socket
 
@@ -264,10 +293,8 @@ void send_to_data_socket(int data_sock, const char *filename){
 	}
 	const char *eof_marker = "EOF";
     send(data_sock, eof_marker, strlen(eof_marker), 0);
-
     fclose(file);
     printf("\nFile uploaded successfully.\n");
-
 }
 
 //Download File from the server
@@ -275,19 +302,12 @@ void receive_file(int sock, const char* filename) {
 	
 	char newfilename[20];
 	strcpy(newfilename,filename);
-	
-
-	char server_response[256]; //empty string
-  	recv(sock , &server_response , sizeof(server_response),0);
-  	printf("\nServer response: %s",server_response);
 
 	send(sock , newfilename , sizeof(newfilename),0); // Send the file name;
-	
-	recv(sock , &server_response , sizeof(server_response),0);
-   	printf("\nServer response: %s",server_response);
 
-	
-
+	char server_response[1024]; //empty string
+  	recv(sock , &server_response , sizeof(server_response),0);
+  	printf("\nServer response: %s",server_response);
 
    // Establish connection to the data socket
 
@@ -350,6 +370,36 @@ void receive_from_data_socket(int data_sock, const char* filename) {
     }
 	fclose(file);
     printf("File downloaded successfully.\n");
+}
 
+void listFilesInCurrentDirectory() {
+    DIR *dir;
+    struct dirent *entry;
+
+    // Open the current directory
+    dir = opendir(".");
+    if (dir == NULL) {
+        perror("Unable to open directory");
+        exit(EXIT_FAILURE);
+    }
+
+    printf("Files in current client directory:\n");
+
+    // Read the directory entries
+    while ((entry = readdir(dir)) != NULL) {
+        printf("%s\n", entry->d_name);
+    }
+
+    // Close the directory
+    closedir(dir);
+}
+
+void displayCurrentDirectory() {
+    char buffer[1024]; // Buffer to hold the path
+    if (getcwd(buffer, sizeof(buffer)) != NULL) {
+        printf("Client path: %s\n", buffer);
+    } else {
+        perror("getcwd() error");
+    }
 }
 
