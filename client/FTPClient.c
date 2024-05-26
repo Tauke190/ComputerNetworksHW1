@@ -16,9 +16,14 @@ void setuser(int sock, char* username);
 void setpass(int sock, char* password);
 
 void send_file(int sock, char* filename);
-void receive_file(int sock, char* filename);
+void receive_file(int sock, const char* filename);
+void send_to_data_socket(int data_sock, const char *filename);
+void receive_from_data_socket(int sock, const char* filename);
 int create_data_socket();
 void handleClientInput(int sock);
+
+
+char* const authenticationMsg = "230 User logged in, proceed.";
 
 void signal_handler(int signum) {
     // to create the semaphors and shared memory if the program is terminated intentionally with Ctrl + Z
@@ -120,7 +125,6 @@ void handleClientInput(int sock){
 		if(strcmp(client_command,"user") == 0){
 			char username[20];
 			scanf("%s",username);
-			printf("Settingusername File.....%s",username);
 			setuser(sock,username);
 		}
 		if(strcmp(client_command,"pass") == 0){
@@ -129,16 +133,45 @@ void handleClientInput(int sock){
 			setpass(sock,password);
 		}
 		if(strcmp(client_command,"put") == 0){
-			printf("Sending File.....\n");
-			send_file(sock,"textclient.txt");
+			char filename[20];
+			scanf("%s",filename);
+			printf("Checking Authentication.....\n");
+			
+			char message[20] = "f";
+			char server_response[256]; //empty string
+			send(sock , message , sizeof(message),0);
+			recv(sock , &server_response , sizeof(server_response),0);
+   		
+			printf("Server response: %s",server_response);
+			if(strcmp(server_response,"Valid User")==0){
+				send_file(sock,filename);
+			}
+			else{
+				
+			}			
 		}
 		if(strcmp(client_command,"get") == 0){
-			printf("Getting File.....");
-			// receive_file(networksock_socket,"textserver.txt");
+			char filename[20];
+			scanf("%s",filename);
+			printf("Checking Authentication.....\n");
+
+			char messagetype[20] = "s";
+			char server_response[256]; //empty string
+  			send(sock , messagetype , sizeof(messagetype),0); // Send the message identifier
+			recv(sock , &server_response , sizeof(server_response),0);
+
+
+			printf("Server response: %s",server_response);
+			if(strcmp(server_response,"Valid User")==0){
+				receive_file(sock,filename);
+			}
+			else{
+			
+			}		
+
 		}
 	}
 }
-
 
 void setuser(int sock, char* username) {
    char newusername[20] = "u";
@@ -163,48 +196,139 @@ void setpass(int sock, char* password) {
 // Handle File Transfer
 void send_file(int sock, char* filename){
 
-   char message[20] = "f";
+  
    char server_response[256]; //empty string
-   send(sock , message , sizeof(message),0);
+   char newfilename[20];
+   strcpy(newfilename,filename);
+
+ 
+   send(sock , newfilename , sizeof(newfilename),0); // Send the file name;
+
    recv(sock , &server_response , sizeof(server_response),0);
-   printf("Server response: %s",server_response);
+   printf("\nServer response: %s",server_response);
 
 
-   FILE *file = fopen(filename, "rb");
+   // Establish connection to the data socket
+
+   struct sockaddr_in server_addr;
+   server_addr.sin_family = AF_INET;
+   server_addr.sin_port = htons(DATA_PORT);
+   inet_pton(AF_INET, "127.0.0.1", &server_addr.sin_addr);
+
+   int data_sock;
+    // Create a socket for the data connection
+    data_sock = socket(AF_INET, SOCK_STREAM, 0);
+    if (data_sock < 0) {
+        perror("Socket creation failed");
+        close(sock);
+        exit(EXIT_FAILURE);
+    }
+
+    server_addr.sin_port = htons(DATA_PORT);
+
+    // Connect to the server data port
+    if (connect(data_sock, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
+        perror("Connect to data port failed");
+        close(data_sock);
+        close(sock);
+        exit(EXIT_FAILURE);
+    }
+
+    // Send the file over the data connection
+    send_to_data_socket(data_sock, filename);
 	
-	if (file == NULL){
+	recv(sock , &server_response , sizeof(server_response),0);
+    printf("\nServer response: %s",server_response);
+
+    // Close the data connection
+    close(data_sock);
+ 
+}
+
+void send_to_data_socket(int data_sock, const char *filename){
+	FILE *file = fopen(filename, "rb");
+
+   if (file == NULL){
 		printf("\nFailed to open the file\n");
 		exit(EXIT_FAILURE);
-	}
+    }
 
 	char buffer[BUFFER_SIZE];
 	size_t bytes_read;
 
 	while((bytes_read = fread(buffer, 1, BUFFER_SIZE, file)) > 0){
-		if (send(sock, buffer, bytes_read, 0) < 0){
+		if (send(data_sock, buffer, bytes_read, 0) < 0){
 			printf("\nfailed to send the file");
 			break;
 		}
 	}
 	const char *eof_marker = "EOF";
-    send(sock, eof_marker, strlen(eof_marker), 0);
+    send(data_sock, eof_marker, strlen(eof_marker), 0);
 
     fclose(file);
     printf("\nFile uploaded successfully.\n");
+
 }
 
 //Download File from the server
-void receive_file(int sock, char* filename) {
-	char messagetype[20] = "s";
-  	send(sock , messagetype , sizeof(messagetype),0); // Send the message identifier
+void receive_file(int sock, const char* filename) {
+	
+	char newfilename[20];
+	strcpy(newfilename,filename);
+	
 
 	char server_response[256]; //empty string
   	recv(sock , &server_response , sizeof(server_response),0);
   	printf("\nServer response: %s",server_response);
 
-	send(sock , filename , sizeof(filename),0); // Send the file name;
+	send(sock , newfilename , sizeof(newfilename),0); // Send the file name;
+	
+	recv(sock , &server_response , sizeof(server_response),0);
+   	printf("\nServer response: %s",server_response);
 
-    FILE *file = fopen(filename, "wb");
+	
+
+
+   // Establish connection to the data socket
+
+   struct sockaddr_in server_addr;
+   server_addr.sin_family = AF_INET;
+   server_addr.sin_port = htons(DATA_PORT);
+   inet_pton(AF_INET, "127.0.0.1", &server_addr.sin_addr);
+
+   int data_sock;
+    // Create a socket for the data connection
+    data_sock = socket(AF_INET, SOCK_STREAM, 0);
+    if (data_sock < 0) {
+        perror("Socket creation failed");
+        close(sock);
+        exit(EXIT_FAILURE);
+    }
+
+    server_addr.sin_port = htons(DATA_PORT);
+
+    // Connect to the server data port
+    if (connect(data_sock, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
+        perror("Connect to data port failed");
+        close(data_sock);
+        close(sock);
+        exit(EXIT_FAILURE);
+    }
+
+	// Needs to check if the file exists in the server
+    receive_from_data_socket(data_sock, filename);
+
+	recv(sock , &server_response , sizeof(server_response),0);
+    printf("\nServer response: %s",server_response);
+
+    // Close the data connection
+    close(data_sock);
+
+  
+}
+
+void receive_from_data_socket(int data_sock, const char* filename) {
+	FILE *file = fopen(filename, "wb");
     if (file == NULL) {
         perror("Failed to open the file");
         exit(EXIT_FAILURE);
@@ -213,12 +337,19 @@ void receive_file(int sock, char* filename) {
     char buffer[BUFFER_SIZE];
     ssize_t bytes_received;
 
-    while ((bytes_received = recv(sock, buffer, BUFFER_SIZE, 0)) > 0) {
+    while ((bytes_received = recv(data_sock, buffer, BUFFER_SIZE, 0)) > 0) {
+		if (strncmp(buffer, "EOF", 3) == 0) {
+            break;
+        }
+		fwrite(buffer, 1, bytes_received, stdout);
         fwrite(buffer, 1, bytes_received, file);
     }
 
     if (bytes_received < 0) {
         perror("Failed to receive the file");
     }
+	fclose(file);
+    printf("File downloaded successfully.\n");
+
 }
 

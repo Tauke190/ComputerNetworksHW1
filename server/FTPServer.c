@@ -6,19 +6,30 @@
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #include <signal.h>
+#include <stdbool.h>
 
 #define PORT 9002
 #define DATA_PORT 9003
 #define BUFFER_SIZE 1024
+#define MAX_LINE_LENGTH 256
 
 int server_socket;
 
 
 void handleClient(int sock);
-void handleFiletransfer(int sock);
-void receive_files(int new_socket);
-void send_files(int sock, char* filename);
+void handleDataSocket(int sock ,char *filename, bool value);
+void handleFileDownload(int sock , char *filename);
+void handleFileUpload(int sock , char *filename);
+void receive_files(int data_sock, char* filename);
+void send_files(int data_sock, char* filename);
 int create_data_socket();
+
+bool checkUsernameExists(const char* username);
+bool checkPasswordExists(const char* password);
+void copyExcludingFirstCharacter(const char* original, char* result);
+
+bool authenticated = false;
+
 
 void signal_handler(int signum) {
     // to create the semaphors and shared memory if the program is terminated intentionally with Ctrl + Z
@@ -123,46 +134,78 @@ int main()
 
 void handleClient(int sock){
 	char client_message[256];
-	char server_message_1[256] = "331 User-name OK, password required";
-	char server_message_2[256] = "Password authenticated!";
-	char server_message_3[256] = "Ready to receive files!";
-	char server_message_4[256] = "Ready to send files!";
+	char server_message_1[256] = "331 Username OK, need password.”";
+	char server_message_2[256] = "530 Not logged in.";
+	char server_message_3[256] = "230 User logged in,";
+	char server_message_4[256] = "530 Not logged in.";
+
+	char server_message_5[256] = "Valid User";
+	char server_message_6[256] = "Valid User";
+	char server_message_7[256] = "User not authenticated!";
 	while (1) {
 		recv(sock , &client_message , sizeof(client_message),0);
-	
 		if(strcmp(client_message, "")){
 			if(client_message[0]=='u'){
 				printf("Server got the client message (type : %c): %s\n",client_message[0],client_message);
-				printf("Sending data now: %s\n",server_message_1);
-				send(sock , &server_message_1 , sizeof(server_message_1),0);
+
+				char username[20];
+				copyExcludingFirstCharacter(client_message,username);
+				if(checkUsernameExists(username)){
+					printf("Sending data now: %s\n",server_message_1);
+					send(sock , &server_message_1 , sizeof(server_message_1),0);
+				}
+				else{
+					printf("Sending data now: %s\n",server_message_2);
+					send(sock , &server_message_2 , sizeof(server_message_2),0);
+				}
 			}
 			if(client_message[0]=='p'){
 				printf("Server got the client message (type : %c): %s\n",client_message[0],client_message);
-				printf("Sending data now: %s\n",server_message_2);
-				send(sock , &server_message_2 , sizeof(server_message_2),0);
+				char password[20];
+				copyExcludingFirstCharacter(client_message,password);
+				if(checkPasswordExists(password)){
+					printf("Sending data now: %s\n",server_message_3);
+					send(sock , &server_message_3 , sizeof(server_message_3),0);
+					authenticated = true;
+				}
+				else{
+					printf("Sending data now: %s\n",server_message_4);
+					send(sock , &server_message_4 , sizeof(server_message_4),0);
+				}
 			}
 			if(client_message[0]=='f'){
-				printf("Getting the file from the client: %s\n","..................");
-				send(sock , &server_message_3 , sizeof(server_message_3),0);
-				// receive_files(sock);
-				handleFiletransfer(sock);
+				if(authenticated){
+					printf("Getting the file from the client: %s\n","..................");
+					send(sock , &server_message_5 , sizeof(server_message_5),0);
+					recv(sock , &client_message , sizeof(client_message),0);
+					printf("Filename:%s\n",client_message);
+					handleDataSocket(sock,client_message,false); // Client Upload to server
+				}
+				else{
+					printf("User not authenticated\n");
+					send(sock , &server_message_7 , sizeof(server_message_7),0);
+				}
+			
 			}
 			if(client_message[0]=='s'){
-				printf("Sending the file to client: %s\n","..................");
-				send(sock , &server_message_4 , sizeof(server_message_4),0);
-				printf("Filename:%s",client_message);
-				// send_files(sock,client_message);
+				if(authenticated){
+					printf("Sending the file to client: %s\n","..................");
+					send(sock , &server_message_6 , sizeof(server_message_6),0);
+					recv(sock , &client_message , sizeof(client_message),0);
+					printf("Filename:%s\n",client_message);
+					handleDataSocket(sock,client_message,true); // Client Download to server
+				}
+				else{
+					printf("User not authenticated\n");
+					send(sock , &server_message_7 , sizeof(server_message_7),0);
+				}
 			}
 		}
 		client_message[0]= '\0';
 	}
 }
 
-void handleFiletransfer(int sock) {
-
-	char server_message[256]; //empty string
-	send(sock , server_message , sizeof(server_message),0);
-
+void handleDataSocket(int sock ,char *filename, bool value) { // True : Upload , False Download
 
  // Create data socket
 	int data_sock = create_data_socket();
@@ -182,15 +225,33 @@ void handleFiletransfer(int sock) {
 		close(sock);
 	}
 
-	send_files(data_sock,"textclient.txt");
-	// receive_file(data_sock,"textclient.txt");
+	if(value == true){
+		handleFileDownload(data_client_sock,filename);
+	}
+	else{
+		handleFileUpload(data_client_sock,filename);
+	}
+
+	send(sock, "150 Closing data connection\r\n", 29, 0);
+	close(data_sock);
 
 }
 
 
-void receive_files(int sock) {
 
-    FILE *file = fopen("received_file.txt", "wb");
+
+//Client uploads to the server
+void handleFileUpload(int data_sock , char *filename){
+	receive_files(data_sock,filename);
+}
+
+//Client downloads from the server
+void handleFileDownload(int data_sock , char *filename){
+	send_files(data_sock,filename);
+}
+
+void receive_files(int data_sock, char* filename){
+    FILE *file = fopen(filename, "wb");
     if (file == NULL) {
         perror("Failed to open the file");
         exit(EXIT_FAILURE);
@@ -199,7 +260,7 @@ void receive_files(int sock) {
     char buffer[BUFFER_SIZE];
     ssize_t bytes_received;
 
-    while ((bytes_received = recv(sock, buffer, BUFFER_SIZE, 0)) > 0) {
+    while ((bytes_received = recv(data_sock, buffer, BUFFER_SIZE, 0)) > 0) {
 		if (strncmp(buffer, "EOF", 3) == 0) {
             break;
         }
@@ -215,9 +276,9 @@ void receive_files(int sock) {
     printf("File received successfully.\n");
 }
 
-void send_files(int sock, char* filename) {
+void send_files(int data_sock, char* filename) {
 
-  FILE *file = fopen("text.txt", "rb");
+  FILE *file = fopen(filename, "rb");
 
     if (file == NULL){
         printf("\nFailed to open the file\n");
@@ -228,16 +289,16 @@ void send_files(int sock, char* filename) {
     size_t bytes_read;
 
     while((bytes_read = fread(buffer, 1, BUFFER_SIZE, file)) > 0){
-        if (send(sock, buffer, bytes_read, 0) < 0){
+        if (send(data_sock, buffer, bytes_read, 0) < 0){
             printf("\nfailed to send the file");
             break;
         }
     }
 	const char *eof_marker = "EOF";
-    send(sock, eof_marker, strlen(eof_marker), 0);
+    send(data_sock, eof_marker, strlen(eof_marker), 0);
 	
     fclose(file);
-    printf("\nFile uploaded successfully.\n");
+    printf("\nFile sent to client successfully successfully.\n");
 }
 
 int create_data_socket() {
@@ -267,3 +328,73 @@ int create_data_socket() {
     return data_sock;
 }
 
+bool checkUsernameExists(const char* username){
+	 FILE *file = fopen("users.txt", "r");
+    if (!file) {
+        perror("Error opening file");
+        return false;
+    }
+
+    char line[MAX_LINE_LENGTH];
+    char prefix[] = "username:";
+    size_t prefix_len = strlen(prefix);
+
+    while (fgets(line, sizeof(line), file)) {
+        if (strncmp(line, prefix, prefix_len) == 0) {
+            char *file_username = line + prefix_len;
+            // Remove the newline character at the end of the username, if it exists
+            file_username[strcspn(file_username, "\n")] = 0;
+
+            if (strcmp(file_username, username) == 0) {
+                fclose(file);
+                return true;
+            }
+        }
+    }
+
+    fclose(file);
+    return false;
+}
+
+
+bool checkPasswordExists(const char* password){
+	 FILE *file = fopen("users.txt", "r");
+    if (!file) {
+        perror("Error opening file");
+        return false;
+    }
+
+    char line[MAX_LINE_LENGTH];
+    char prefix[] = "password:";
+    size_t prefix_len = strlen(prefix);
+
+    while (fgets(line, sizeof(line), file)) {
+        if (strncmp(line, prefix, prefix_len) == 0) {
+            char *file_password = line + prefix_len;
+            // Remove the newline character at the end of the password, if it exists
+            file_password[strcspn(file_password, "\n")] = 0;
+
+            if (strcmp(file_password, password) == 0) {
+                fclose(file);
+                return true;
+            }
+        }
+    }
+
+    fclose(file);
+    return false;
+}
+
+void copyExcludingFirstCharacter(const char* original, char* result) {
+    // Check if the original string is empty
+    if (original == NULL || strlen(original) == 0) {
+        result[0] = '\0'; // Ensure the result is an empty string
+        return;
+    }
+    
+    // Point to the second character of the original string
+    const char* src = original + 1;
+    
+    // Copy the rest of the string to the result
+    strcpy(result, src);
+};
