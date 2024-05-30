@@ -21,6 +21,7 @@ void listFilesInCurrentDirectory();
 void displayCurrentDirectory();
 void handle_cd_command(char *command);
 
+int data_port;
 
 int main() {
     int cmd_sock;
@@ -65,23 +66,17 @@ int main() {
             printf("%s","File name does not exists , Try Again\n");
             continue;
         }
-
+        
         if (cmd && filename) {
             if (strcmp(cmd, "USER") == 0) {
                 char cmd_buffer[BUFFER_SIZE];  
                 snprintf(cmd_buffer, sizeof(cmd_buffer), "USER %s", filename);
                 send(cmd_sock, cmd_buffer, strlen(cmd_buffer), 0);
-               
-                // char server_response[256]; //empty string
-                // recv(cmd_sock , &server_response , sizeof(server_response),0);
             } 
             else if (strcmp(cmd, "PASS") == 0) {
                 char cmd_buffer[BUFFER_SIZE];  
                 snprintf(cmd_buffer, sizeof(cmd_buffer), "PASS %s", filename);
                 send(cmd_sock, cmd_buffer, strlen(cmd_buffer), 0);
-               
-                // char server_response[256]; //empty string
-                // recv(cmd_sock , &server_response , sizeof(server_response),0);
             } 
             else if(strcmp(cmd, "STOR") == 0) {
                 
@@ -95,6 +90,7 @@ int main() {
                 if(strcmp(server_response,"Valid User")==0){
                     int data_client_sock = handle_data_client(cmd_sock); // handle the data socket
                     upload_file(data_client_sock, filename);
+                    printf("Data socket closed on port : %d\n", data_port);
                     close(data_client_sock);
                 }
                 
@@ -111,13 +107,26 @@ int main() {
                     int data_client_sock = handle_data_client(cmd_sock); // handle the data socket
                     download_file(data_client_sock, filename);
                     close(data_client_sock);
+                    printf("Data socket closed on port : %d\n", data_port);
                 }
-            } 
-            else if (strcmp(cmd, "CD") == 0) {
+            }
+            else if (strcmp(cmd, "CWD") == 0) {
                 char cmd_buffer[BUFFER_SIZE];  
-                snprintf(cmd_buffer, sizeof(cmd_buffer), "CD %s", filename);
+                snprintf(cmd_buffer, sizeof(cmd_buffer), "CWD %s", filename);
                 send(cmd_sock, cmd_buffer, strlen(cmd_buffer), 0);
-               
+            }
+            else if (strcmp(cmd, "!CWD") == 0) {
+                if (chdir(filename) < 0) {
+                    perror("chdir failed");
+                }
+                else{
+                    printf("Sucessfully changed to directory : %s\n",filename);
+                }
+                continue;
+            } 
+            else{
+                printf("%s","Invalid command format. Use USER <username> PASS <password> STOR <filename> or RETR <filename>.\n");
+                continue;
             }
         } else if(cmd){
             if (strcmp(cmd, "LIST") == 0) {
@@ -138,17 +147,18 @@ int main() {
                 displayCurrentDirectory();
                 continue; 
             }
-            else if (strcmp(cmd, "!CD") == 0) {
-               handle_cd_command(filename);
-            } 
-            else if (strcmp(cmd, "!QUIT") == 0) {
+           
+            else if (strcmp(cmd, "QUIT") == 0) {
                break;
+            }
+            else{
+                printf("%s","Invalid command format. Use USER <username> PASS <password> STOR <filename> or RETR <filename>.\n");
+                continue;
             }
         }
         else{
             printf("%s","Invalid command format. Use STOR <filename> or RETR <filename>.\n");
         }
-
         if (read(cmd_sock, server_response, BUFFER_SIZE) > 0) {
             printf("%s\n", server_response);
         }
@@ -192,9 +202,11 @@ int handle_data_client(int cmd_sock) {
     p1 = port / 256;
     p2 = port % 256;
 
+    data_port = port;
+
     sprintf(commandbuffer, "PORT 127,0,0,1,%d,%d", p1, p2);
-    printf("Port: %d\n", port);
-    printf("%s\n", commandbuffer);
+    printf("Data socket created on port : %d\n", port);
+    // printf("%s\n", commandbuffer);
     send(cmd_sock, commandbuffer, strlen(commandbuffer), 0);
 
     if (listen(data_sock, 1) < 0) {
@@ -281,7 +293,6 @@ void listFilesInCurrentDirectory() {
     while ((entry = readdir(dir)) != NULL) {
         printf("%s\n", entry->d_name);
     }
-	
     // Close the directory
     closedir(dir);
 }
@@ -294,11 +305,9 @@ void displayCurrentDirectory() {
         perror("getcwd() error");
     }
 }
+
 void handle_cd_command(char *command) {
     if (chdir(command) < 0) {
         perror("chdir failed");
-    }
-	
+    }	
 }
-
-

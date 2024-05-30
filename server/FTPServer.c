@@ -11,7 +11,7 @@
 #include <dirent.h>
 
 
-void loadUserFile();
+void loadUserfromfile();
 #define USERMAX 1024  // max number of users that can be read from file
 #define MAX_LENGTH 256
 
@@ -19,10 +19,10 @@ void loadUserFile();
 #define BUFFER_SIZE 1024
 
 void handle_client(int cmd_sock);
-void handle_stor(int data_sock, const char* filename);
-void handle_retr(int data_sock, const char* filename);
-void ftpUserCmd(int i, char *resDat);
-void ftpPassCmd(int i, char *resDat , char username[256]);
+void handlefilestore(int data_sock, const char* filename);
+void handlefileretrieve(int data_sock, const char* filename);
+void handleUserCommand(int i, char *resDat);
+void handlePassCommand(int i, char *resDat , char username[256]);
 bool isAuthenticated(int i) ;
 bool file_exists(const char *filename);
 char* listFilesInCurrentDirectory();
@@ -60,7 +60,7 @@ int main() {
     fd_set readfds;
     int max_sd;
 
-    loadUserFile();
+    loadUserfromfile();
 
     // Create command socket
     if ((cmd_sock = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
@@ -90,6 +90,10 @@ int main() {
 
     printf("Minimal FTP server listening on port %d for commands\n", CMD_PORT);
 
+    //DECLARE 2 fd sets (file descriptor sets : a collection of file descriptors)
+    fd_set all_sockets;
+    fd_set ready_sockets;
+    
     while (1) {
         FD_ZERO(&readfds);
         FD_SET(cmd_sock, &readfds);
@@ -103,8 +107,8 @@ int main() {
                 exit(EXIT_FAILURE);
             }
 
-            printf("New client connected\n");
-            send(new_cmd_sock, "New client connected\n", strlen("New client connected\n"), 0);
+            printf("New client conneceted\n");
+            send(new_cmd_sock, "220 Service ready for new user\n", strlen("220 Service ready for new user\n"), 0);
 
             if (fork() == 0) {
                 close(cmd_sock);
@@ -141,11 +145,11 @@ void handle_client(int cmd_sock) {
             if (strcmp(cmd, "USER") == 0) {
                 printf("Received USER command: %s\n", arg);
                 strcpy(username,arg);
-                ftpUserCmd(cmd_sock,arg); // arg = username
+                handleUserCommand(cmd_sock,arg); // arg = username
             }
             else if(strcmp(cmd, "PASS") == 0) {
                 printf("Received PASS command: %s\n", arg);
-                ftpPassCmd(cmd_sock,arg,username); // arg = password
+                handlePassCommand(cmd_sock,arg,username); // arg = password
             }
             else if(strcmp(cmd, "PORT") == 0) {
               if(isAuthenticated(cmd_sock)){
@@ -153,9 +157,9 @@ void handle_client(int cmd_sock) {
                 int ip1, ip2, ip3, ip4, p1, p2;
                 sscanf(arg, "%d,%d,%d,%d,%d,%d", &ip1, &ip2, &ip3, &ip4, &p1, &p2);
                 data_port = p1 * 256 + p2;
-                printf("Data port %d:\n",data_port);
+                printf("Data socked opened on port %d:\n",data_port);
 
-                  // save
+
                 listOfConnectedClients[cmd_sock].userCurrentDataPort = data_port;
                 // listOfConnectedClients[i].clientIPAddr = ipAdr;
 
@@ -178,13 +182,14 @@ void handle_client(int cmd_sock) {
                 send(cmd_sock, "200 PORT Sucess: New data port open \n", strlen("2200 PORT Sucess: New data port open \n"), 0);
 
                 if(isupload){
-                    handle_stor(data_sock, filename); 
+                    handlefilestore(data_sock, filename); 
                 }
                 else{
-                    handle_retr(data_sock, filename); 
+                    handlefileretrieve(data_sock, filename); 
                 } 
                 close(data_sock);
                 // send(cmd_sock, "Data PORT closed \n", strlen("Data PORT closed \n"), 0);
+
               }
             } else if (strcmp(cmd, "STOR") == 0) {
                  printf("Received STOR command: %s\n", arg);
@@ -248,13 +253,21 @@ void handle_client(int cmd_sock) {
                 }
                
             }
-            else if(strcmp(cmd, "CD") == 0) {
+            else if(strcmp(cmd, "CWD") == 0) {
               printf("Received LIST command: %s\n", arg);
               if(isAuthenticated(cmd_sock)){
                   handle_cd_command(arg);
-                  char corResponse[BUFFER_SIZE] = "Changed directory sucessfully /";
-                  strncat(corResponse, arg, BUFFER_SIZE - strlen(corResponse) - 1);
-                  send(cmd_sock, corResponse, sizeof(corResponse), 0);
+                  char cwd[BUFFER_SIZE];
+                  if (getcwd(cwd, sizeof(cwd)) != NULL) {
+                    printf("Current working dir: %s\n", cwd);
+                  } else {
+                    perror("getcwd() error");
+                  }
+
+                  printf("%s",cwd);
+                  char currentDir[BUFFER_SIZE] = "200 directory changed to server/";
+                  strncat(currentDir, cwd, BUFFER_SIZE - strlen(currentDir) - 1);
+                  send(cmd_sock, currentDir, sizeof(currentDir), 0);
               }
               else{
                   char corResponse[BUFFER_SIZE] = "530 Not logged in.";
@@ -268,7 +281,7 @@ void handle_client(int cmd_sock) {
     }
 }
 
-void handle_stor(int data_sock, const char* filename) {
+void handlefilestore(int data_sock, const char* filename) {
 
   
     FILE *file = fopen(filename, "wb");
@@ -287,7 +300,7 @@ void handle_stor(int data_sock, const char* filename) {
     fclose(file);
 }
 
-void handle_retr(int data_sock, const char* filename) {
+void handlefileretrieve(int data_sock, const char* filename) {
     FILE *file = fopen(filename, "rb");
     if (!file) {
         perror("File open failed");
@@ -305,7 +318,7 @@ void handle_retr(int data_sock, const char* filename) {
 }
 
 
-void loadUserFile() {
+void loadUserfromfile() {
   FILE *userFile = fopen("users.txt", "r");
   if (!userFile) {
     // if user file does not exist
@@ -330,7 +343,7 @@ void loadUserFile() {
   }
 }
 
-void ftpUserCmd(int i, char *resDat) {
+void handleUserCommand(int i, char *resDat) {
   bool foundDat = false;
   // loop to check if user exists
   for (int n = 0; n < userCount; n++) {
@@ -352,7 +365,7 @@ void ftpUserCmd(int i, char *resDat) {
 }
 
 // PASS command, i = socket
-void ftpPassCmd(int i, char *resDat , char username[256]) {
+void handlePassCommand(int i, char *resDat , char username[256]) {
   // check if USER command is run first
   if (!listOfConnectedClients[i].username) {
     char corResponse[BUFFER_SIZE] = " 530 Not logged in.";
