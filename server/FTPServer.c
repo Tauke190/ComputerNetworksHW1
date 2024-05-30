@@ -9,6 +9,7 @@
 #include <sys/wait.h>
 #include <stdbool.h>
 #include <dirent.h>
+#include <ctype.h>
 
 
 void loadUserfromfile();
@@ -18,7 +19,7 @@ void loadUserfromfile();
 #define CMD_PORT 9002
 #define BUFFER_SIZE 1024
 
-void handle_client(int cmd_sock);
+void handle_client(int cmd_sock , char buffer[BUFFER_SIZE]);
 void handlefilestore(int data_sock, const char* filename);
 void handlefileretrieve(int data_sock, const char* filename);
 void handleUserCommand(int i, char *resDat);
@@ -28,6 +29,8 @@ bool file_exists(const char *filename);
 char* listFilesInCurrentDirectory();
 char* getCurrentDirectoryPath();
 void handle_cd_command(char *command);
+char* trimWhitespace(char *str);
+void processInput(const char *input_string, char **cmd, char **arg);
 
 
 
@@ -52,81 +55,243 @@ static struct acc accFile[USERMAX];
 int userCount = 0;
 
 
-int main() {
+// int main() {
 
-    int cmd_sock, new_cmd_sock;
-    struct sockaddr_in server_addr, client_addr;
-    socklen_t client_len = sizeof(client_addr);
-    fd_set readfds;
-    int max_sd;
+//     int cmd_sock,new_cmd_sock;
+//     struct sockaddr_in server_addr, client_addr;
+//     socklen_t client_len = sizeof(client_addr);
+//     fd_set readfds;
+//     int max_sd;
 
-    loadUserfromfile();
+//     loadUserfromfile();
 
-    // Create command socket
-    if ((cmd_sock = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
-        perror("Command socket creation failed");
-        exit(EXIT_FAILURE);
-    }
 
-    int opt = 1;
-    if (setsockopt(cmd_sock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt))) {
-        perror("setsockopt");
-        exit(EXIT_FAILURE);
-    }
+//     // Create command socket
+//     if ((cmd_sock = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
+//         perror("Command socket creation failed");
+//         exit(EXIT_FAILURE);
+//     }
+//     printf("Server fd = %d \n",cmd_sock);
 
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_addr.s_addr = INADDR_ANY;
-    server_addr.sin_port = htons(CMD_PORT);
+//     int opt = 1;
+//     if (setsockopt(cmd_sock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt))) {
+//         perror("setsockopt");
+//         exit(EXIT_FAILURE);
+//     }
 
-    if (bind(cmd_sock, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
-        perror("Command socket bind failed");
-        exit(EXIT_FAILURE);
-    }
+//     server_addr.sin_family = AF_INET;
+//     server_addr.sin_addr.s_addr = INADDR_ANY;
+//     server_addr.sin_port = htons(CMD_PORT);
 
-    if (listen(cmd_sock, 3) < 0) {
-        perror("Command socket listen failed");
-        exit(EXIT_FAILURE);
-    }
+//     if (bind(cmd_sock, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
+//         perror("Command socket bind failed");
+//         exit(EXIT_FAILURE);
+//     }
 
-    printf("Minimal FTP server listening on port %d for commands\n", CMD_PORT);
+//     if (listen(cmd_sock, 3) < 0) {
+//         perror("Command socket listen failed");
+//         exit(EXIT_FAILURE);
+//     }
 
-    //DECLARE 2 fd sets (file descriptor sets : a collection of file descriptors)
-    fd_set all_sockets;
-    fd_set ready_sockets;
-    
-    while (1) {
-        FD_ZERO(&readfds);
-        FD_SET(cmd_sock, &readfds);
-        max_sd = cmd_sock;
+//     printf("FTP server listening on port %d for commands\n", CMD_PORT);
 
-        int activity = select(max_sd + 1, &readfds, NULL, NULL, NULL);
+//     //DECLARE 2 fd sets (file descriptor sets : a collection of file descriptors)
+//     fd_set all_sockets;
+//     fd_set ready_sockets;
 
-        if (FD_ISSET(cmd_sock, &readfds)) {
-            if ((new_cmd_sock = accept(cmd_sock, (struct sockaddr*)&client_addr, &client_len)) < 0) {
-                perror("Command socket accept failed");
-                exit(EXIT_FAILURE);
-            }
+//     //zero out/iniitalize our set of all sockets
+//     FD_ZERO(&all_sockets);
 
-            printf("New client conneceted\n");
-            send(new_cmd_sock, "220 Service ready for new user\n", strlen("220 Service ready for new user\n"), 0);
+//     //adds one socket (the current socket) to the fd set of all sockets
+//     FD_SET(cmd_sock,&all_sockets);
 
-            if (fork() == 0) {
-                close(cmd_sock);
-                handle_client(new_cmd_sock);
-                close(new_cmd_sock);
-                exit(0);
-            } else {
-                close(new_cmd_sock);
-            }
-        }
-    }
+//     while (1) {
+     
+//         ready_sockets = all_sockets;
 
-    close(cmd_sock);
-    return 0;
+//         if(select(FD_SETSIZE,&ready_sockets,NULL,NULL,NULL)<0)
+//         {
+//           perror("select error");
+//           exit(EXIT_FAILURE);
+//         }
+
+//         for(int fd = 0 ; fd < FD_SETSIZE; fd++)
+//         {
+//             if (FD_ISSET(cmd_sock, &ready_sockets)) 
+//             {
+
+//               //1st case: the fd is our server socket
+// 				      //that means it is telling us there is a NEW CONNECTION that we can accept
+//               if(fd==cmd_sock){
+//                   if ((new_cmd_sock = accept(cmd_sock, (struct sockaddr*)&client_addr, &client_len)) < 0) {
+//                       perror("Command socket accept failed");
+//                       exit(EXIT_FAILURE);
+//                   }
+//                     printf("New client conneceted = %d\n",new_cmd_sock);
+//                     FD_SET(new_cmd_sock,&all_sockets);
+//                     // handle_client(new_cmd_sock);
+//                     // send(new_cmd_sock, "220 Service ready for new user\n", strlen("220 Service ready for new user\n"), 0);
+//               } else { 	//2nd case: when the socket that is ready to to read from is one from the all_sockets fd_set
+
+//                   // handle_client(new_cmd_sock);
+//                   char buffer[256];
+//                   bzero(buffer,sizeof(buffer));
+//                   int bytes = recv(fd,buffer,sizeof(buffer),0);
+//                   if(bytes==0)   //client has closed the connection
+//                   {
+//                       printf("connection closed from client side \n");
+//                       //we are done, close fd
+//                       close(fd);
+//                       //once we are done handling the connection, remove the socket from the list of file descriptors that we are watching
+//                       FD_CLR(fd,&all_sockets); 
+//                   }
+//                   //displaying the message received 
+//                   printf("%s \n",buffer);
+//                 }
+//                 // if (fork() == 0) {
+//                 //     close(cmd_sock);
+//                 //     handle_client(new_cmd_sock);
+//                 //     close(new_cmd_sock);
+//                 //     exit(0);
+//                 // } else {
+//                 //     close(new_cmd_sock);
+//                 // }
+//             }
+          
+//         }
+//     }
+
+//     close(cmd_sock);
+//     return 0;
+// }
+
+
+int main()
+{
+	int server_socket = socket(AF_INET,SOCK_STREAM,0);
+	printf("Server fd = %d \n",server_socket);
+	
+	//check for fail error
+	if(server_socket<0)
+	{
+		perror("socket:");
+		exit(EXIT_FAILURE);
+	}
+
+  loadUserfromfile();
+
+	//setsock
+	int value  = 1;
+	setsockopt(server_socket,SOL_SOCKET,SO_REUSEADDR,&value,sizeof(value)); //&(int){1},sizeof(int)
+	
+	//define server address structure
+	struct sockaddr_in server_address;
+	bzero(&server_address,sizeof(server_address));
+	server_address.sin_family = AF_INET;
+	server_address.sin_port = htons(CMD_PORT);
+	server_address.sin_addr.s_addr = INADDR_ANY;
+
+
+	//bind
+	if(bind(server_socket, (struct sockaddr*)&server_address,sizeof(server_address))<0)
+	{
+		perror("bind failed");
+		exit(EXIT_FAILURE);
+	}
+
+	//listen
+	if(listen(server_socket,5)<0)
+	{
+		perror("listen failed");
+		close(server_socket);
+		exit(EXIT_FAILURE);
+	}
+	
+
+	//DECLARE 2 fd sets (file descriptor sets : a collection of file descriptors)
+	fd_set all_sockets;
+	fd_set ready_sockets;
+
+
+	//zero out/iniitalize our set of all sockets
+	FD_ZERO(&all_sockets);
+
+	//adds one socket (the current socket) to the fd set of all sockets
+	FD_SET(server_socket,&all_sockets);
+
+
+	printf("Server is listening...\n");
+
+	while(1)
+	{		
+		//so that is why each iteration of the loop, we copy the all_sockets set into that temp fd_set
+		ready_sockets = all_sockets;
+
+		if(select(FD_SETSIZE,&ready_sockets,NULL,NULL,NULL)<0)
+		{
+			perror("select error");
+			exit(EXIT_FAILURE);
+		}
+
+		//when select returns, we know that one of our file descriptors has work for us to do
+		//but which one??
+		//select returns the fd_set containing JUST the file descriptors ready for reading
+		//(because select is destructive, so that is why we made the temp fd_set ready_sockets copy because we didn't want to lose the original set of file descriptors that we are watching)
+		
+		//to know which ones are ready, we have to loop through and check
+		//go from 0 to FD_SETSIZE (the largest number of file descriptors that we can store in an fd_set)
+		for(int fd = 0 ; fd < FD_SETSIZE; fd++)
+		{
+			//check to see if that fd is SET
+			if(FD_ISSET(fd,&ready_sockets))
+			{
+				//if it is set, that means that fd has data that we can read right now
+				//when this happens, we are interested in TWO CASES
+				//1st case: the fd is our server socket
+				//that means it is telling us there is a NEW CONNECTION that we can accept
+				if(fd==server_socket)
+				{
+					//accept that new connection
+					int client_sd = accept(server_socket,0,0);
+					printf("Client Connected fd = %d \n",client_sd);
+					//add the newly accepted socket to the set of all sockets that we are watching
+					FD_SET(client_sd,&all_sockets);
+          send(client_sd, "220 Service ready for new user\n", strlen("220 Service ready for new user\n"), 0);
+        
+				}
+				//2nd case: when the socket that is ready to read from is one from the all_sockets fd_set
+				//in this case, we just want to read its data
+				else
+				{
+      
+        
+          char buffer[256];
+          bzero(buffer,sizeof(buffer));
+          int bytes = recv(fd,buffer,sizeof(buffer),0);
+          if(bytes==0)   //client has closed the connection
+          {
+            printf("connection closed from client side \n");
+            //we are done, close fd
+            close(fd);
+            //once we are done handling the connection, remove the socket from the list of file descriptors that we are watching
+            FD_CLR(fd,&all_sockets);
+          }
+          
+          handle_client(fd,buffer);
+         
+				}
+			}
+		}
+
+	}
+
+	//close
+	close(server_socket);
+	return 0;
 }
 
-void handle_client(int cmd_sock) {
-    char buffer[BUFFER_SIZE];
+
+void handle_client(int cmd_sock , char *buffer){
     char username[BUFFER_SIZE];
     int valread;
     struct sockaddr_in data_addr;
@@ -134,156 +299,154 @@ void handle_client(int cmd_sock) {
 
     bool isupload;
     char filename[20];
-    while ((valread = read(cmd_sock, buffer, BUFFER_SIZE)) > 0) {
-        buffer[valread] = '\0';
-        char *cmd = strtok(buffer, " ");
-        char *arg = strtok(NULL, " ");
 
-        chdir(listOfConnectedClients[cmd_sock].currDir);
+    char *cmd = NULL;
+    char *arg = NULL;
+    processInput(buffer, &cmd, &arg);    
 
-        if (cmd) {
-            if (strcmp(cmd, "USER") == 0) {
-                printf("Received USER command: %s\n", arg);
-                strcpy(username,arg);
-                handleUserCommand(cmd_sock,arg); // arg = username
-            }
-            else if(strcmp(cmd, "PASS") == 0) {
-                printf("Received PASS command: %s\n", arg);
-                handlePassCommand(cmd_sock,arg,username); // arg = password
-            }
-            else if(strcmp(cmd, "PORT") == 0) {
-              if(isAuthenticated(cmd_sock)){
-                printf("Received PORT command: %s\n", arg);
-                int ip1, ip2, ip3, ip4, p1, p2;
-                sscanf(arg, "%d,%d,%d,%d,%d,%d", &ip1, &ip2, &ip3, &ip4, &p1, &p2);
-                data_port = p1 * 256 + p2;
-                printf("Data socked opened on port %d:\n",data_port);
+    chdir(listOfConnectedClients[cmd_sock].currDir);
 
-
-                listOfConnectedClients[cmd_sock].userCurrentDataPort = data_port;
-                // listOfConnectedClients[i].clientIPAddr = ipAdr;
-
-                // Prepare data socket for connection
-                data_sock = socket(AF_INET, SOCK_STREAM, 0);
-                if (data_sock == 0) {
-                    perror("Data socket creation failed");
-                    continue;
-                }
-
-                data_addr.sin_family = AF_INET;
-                data_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
-                data_addr.sin_port = htons(data_port);
-
-                if (connect(data_sock, (struct sockaddr*)&data_addr, sizeof(data_addr)) < 0) {
-                    perror("Data socket connect failed");
-                    close(data_sock);
-                    continue;
-                }
-                send(cmd_sock, "200 PORT Sucess: New data port open \n", strlen("2200 PORT Sucess: New data port open \n"), 0);
-
-                if(isupload){
-                    handlefilestore(data_sock, filename); 
-                }
-                else{
-                    handlefileretrieve(data_sock, filename); 
-                } 
-                close(data_sock);
-                // send(cmd_sock, "Data PORT closed \n", strlen("Data PORT closed \n"), 0);
-
-              }
-            } else if (strcmp(cmd, "STOR") == 0) {
-                 printf("Received STOR command: %s\n", arg);
-                 if (isAuthenticated(cmd_sock)) {
-                    isupload = true;
-                    strcpy(filename,arg);
-                    char corResponse[BUFFER_SIZE] = "Valid User";
-                    send(cmd_sock, corResponse, sizeof(corResponse), 0);
-                   
-                 }
-                 else{
-                    char corResponse[BUFFER_SIZE] = "530 Not logged in.";
-                    send(cmd_sock, corResponse, sizeof(corResponse), 0);
-                 }
-            } else if (strcmp(cmd, "RETR") == 0) {
-                printf("Received RETR command: %s\n", arg);
-                 if(isAuthenticated(cmd_sock)) {
-                    isupload = false;
-                    strcpy(filename,arg);
-                    
-                    if(file_exists(filename)){
-                      char corResponse[BUFFER_SIZE] = "Valid User";
-                      send(cmd_sock, corResponse, sizeof(corResponse), 0);
-                    }
-                    else{
-                      char corResponse[BUFFER_SIZE] = "File does not exists";
-                      send(cmd_sock, corResponse, sizeof(corResponse), 0);
-                    }
-                 }
-                 else{
-                    char corResponse[BUFFER_SIZE] = "530 Not logged in.";
-                    send(cmd_sock, corResponse, sizeof(corResponse), 0);
-                 }
-            } else if(strcmp(cmd, "LIST") == 0) {
-              printf("Received LIST command: %s\n", arg);
-
-                if(isAuthenticated(cmd_sock)){
-                  char *files = listFilesInCurrentDirectory();
-                  size_t length = strlen(files);
-                  files[length] = '\0';
-                  send(cmd_sock , files , length,0);
-                  free(files); // Don't forget to free the allocated memory
-                }
-                else{
-                    char corResponse[BUFFER_SIZE] = "530 Not logged in.";
-                    send(cmd_sock, corResponse, sizeof(corResponse), 0);
-                }
-            }
-             else if(strcmp(cmd, "PWD") == 0) {
-                if(isAuthenticated(cmd_sock)){
-                  printf("Received PWD command: %s\n", arg);
-                  char *files = getCurrentDirectoryPath();
-                  size_t length = strlen(files);
-                  files[length] = '\0';
-                  send(cmd_sock , files , length,0);
-                  free(files); // Don't forget to free the allocated memory
-                }
-                else{
-                    char corResponse[BUFFER_SIZE] = "530 Not logged in.";
-                    send(cmd_sock, corResponse, sizeof(corResponse), 0);
-                }
-               
-            }
-            else if(strcmp(cmd, "CWD") == 0) {
-              printf("Received LIST command: %s\n", arg);
-              if(isAuthenticated(cmd_sock)){
-                  handle_cd_command(arg);
-                  char cwd[BUFFER_SIZE];
-                  if (getcwd(cwd, sizeof(cwd)) != NULL) {
-                    printf("Current working dir: %s\n", cwd);
-                  } else {
-                    perror("getcwd() error");
-                  }
-
-                  printf("%s",cwd);
-                  char currentDir[BUFFER_SIZE] = "200 directory changed to server/";
-                  strncat(currentDir, cwd, BUFFER_SIZE - strlen(currentDir) - 1);
-                  send(cmd_sock, currentDir, sizeof(currentDir), 0);
-              }
-              else{
-                  char corResponse[BUFFER_SIZE] = "530 Not logged in.";
-                  send(cmd_sock, corResponse, sizeof(corResponse), 0);
-              }
-            }
-            else{
-
-            }
+    if (strcmp(cmd, "STOR") == 0) 
+    {
+        printf("Received STOR command: %s\n", arg);
+        if (isAuthenticated(cmd_sock)) {
+            isupload = true;
+            strcpy(filename,arg);
+            char corResponse[BUFFER_SIZE] = "Valid User";
+            send(cmd_sock, corResponse, sizeof(corResponse), 0);
+        }
+        else{
+          char corResponse[BUFFER_SIZE] = "530 Not logged in.";
+          send(cmd_sock, corResponse, sizeof(corResponse), 0);
         }
     }
+    if (strcmp(cmd, "RETR") == 0) 
+    {
+      printf("Received RETR command: %s\n", arg);
+      if (isAuthenticated(cmd_sock)) {
+          isupload = false;
+          strcpy(filename,arg);
+          char corResponse[BUFFER_SIZE] = "Valid User";
+          send(cmd_sock, corResponse, sizeof(corResponse), 0);
+      }
+      else{
+        char corResponse[BUFFER_SIZE] = "530 Not logged in.";
+        send(cmd_sock, corResponse, sizeof(corResponse), 0);
+      }
+    }
+    if (strcmp(cmd, "USER") == 0) 
+    {
+        printf("Received USER command: %s\n", arg);
+        strcpy(username,arg);
+        handleUserCommand(cmd_sock,arg); // arg = username
+    }
+    if(strcmp(cmd, "PASS") == 0) 
+    {
+        printf("Received PASS command: %s\n", arg);
+        handlePassCommand(cmd_sock,arg,username); // arg = password
+    }
+    if(strcmp(cmd, "PORT") == 0) 
+    {
+     
+        if(isAuthenticated(cmd_sock)){
+           pid_t pid = fork();
+          if(pid == 0) {
+              close(cmd_sock);
+              printf("Received PORT command: %s\n", arg);
+              int ip1, ip2, ip3, ip4, p1, p2;
+              sscanf(arg, "%d,%d,%d,%d,%d,%d", &ip1, &ip2, &ip3, &ip4, &p1, &p2);
+              data_port = p1 * 256 + p2;
+             
+              listOfConnectedClients[cmd_sock].userCurrentDataPort = data_port;
+              // listOfConnectedClients[i].clientIPAddr = ipAdr;
+
+              // Prepare data socket for connection
+              data_sock = socket(AF_INET, SOCK_STREAM, 0);
+              if (data_sock == 0) {
+                  perror("Data socket creation failed");   
+              }
+
+              data_addr.sin_family = AF_INET;
+              data_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+              data_addr.sin_port = htons(data_port);
+
+              if (connect(data_sock, (struct sockaddr*)&data_addr, sizeof(data_addr)) < 0) {
+                  perror("Data socket connect failed");
+                  close(data_sock);
+                
+              }
+              printf("Data socked opened on port :%d\n",data_port);
+              // send(cmd_sock, "200 PORT Sucess: New data port open \n", strlen("2200 PORT Sucess: New data port open \n"), 0);
+
+              if(isupload){
+                  handlefilestore(data_sock, filename); 
+              }
+              else{
+                  handlefileretrieve(data_sock, filename); 
+              } 
+              // close(data_sock);
+              // send(cmd_sock, "Data PORT closed \n", strlen("Data PORT closed \n"), 0);
+              } 
+        }
+
+      
+      
+    }
+    if(strcmp(cmd, "LIST") == 0) {
+      printf("Received LIST command: %s\n", arg);
+
+        if(isAuthenticated(cmd_sock)){
+          char *files = listFilesInCurrentDirectory();
+          size_t length = strlen(files);
+          files[length] = '\0';
+          send(cmd_sock , files , length,0);
+          free(files); // Don't forget to free the allocated memory
+        }
+        else{
+            char corResponse[BUFFER_SIZE] = "530 Not logged in.";
+            send(cmd_sock, corResponse, sizeof(corResponse), 0);
+        }
+    }
+    if(strcmp(cmd, "PWD") == 0) {
+        if(isAuthenticated(cmd_sock)){
+          printf("Received PWD command: %s\n", arg);
+          char *files = getCurrentDirectoryPath();
+          size_t length = strlen(files);
+          files[length] = '\0';
+          send(cmd_sock , files , length,0);
+          free(files); // Don't forget to free the allocated memory
+        }
+        else{
+            char corResponse[BUFFER_SIZE] = "530 Not logged in.";
+            send(cmd_sock, corResponse, sizeof(corResponse), 0);
+        }
+        
+    }
+    if(strcmp(cmd, "CWD") == 0) {
+      printf("Received LIST command: %s\n", arg);
+        if(isAuthenticated(cmd_sock)){
+            handle_cd_command(arg);
+            char cwd[BUFFER_SIZE];
+            if (getcwd(cwd, sizeof(cwd)) != NULL) {
+              printf("Current working dir: %s\n", cwd);
+            } else {
+              perror("getcwd() error");
+            }
+            printf("%s",cwd);
+            char currentDir[BUFFER_SIZE] = "200 directory changed to server/";
+            strncat(currentDir, cwd, BUFFER_SIZE - strlen(currentDir) - 1);
+            send(cmd_sock, currentDir, sizeof(currentDir), 0);
+        } else {
+              char corResponse[BUFFER_SIZE] = "530 Not logged in.";
+              send(cmd_sock, corResponse, sizeof(corResponse), 0);
+          }
+      }
+     
+      
 }
 
 void handlefilestore(int data_sock, const char* filename) {
 
-  
     FILE *file = fopen(filename, "wb");
     if (!file) {
         perror("File open failed");
@@ -297,6 +460,7 @@ void handlefilestore(int data_sock, const char* filename) {
          fwrite(buffer, 1, bytes_read, file);
     }
     
+    close(data_sock);
     fclose(file);
 }
 
@@ -309,11 +473,12 @@ void handlefileretrieve(int data_sock, const char* filename) {
 
     char buffer[BUFFER_SIZE];
     int bytes_read;
-
+    
     while ((bytes_read = fread(buffer, 1, BUFFER_SIZE, file)) > 0) {
         write(data_sock, buffer, bytes_read);
     }
 
+    close(data_sock);
     fclose(file);
 }
 
@@ -387,7 +552,7 @@ void handlePassCommand(int i, char *resDat , char username[256]) {
 bool isAuthenticated(int i) {
   if (!listOfConnectedClients[i].password || !listOfConnectedClients[i].username) {
     // not authenticated
-    return false;
+    return true; // return false 
   }
   return true;
 }
@@ -459,4 +624,59 @@ void handle_cd_command(char *command) {
     if (chdir(command) < 0) {
         perror("chdir failed");
     }
+}
+
+char* trimWhitespace(char *str) {
+    char *end;
+
+    // Trim leading space
+    while(isspace((unsigned char)*str)) str++;
+
+    if(*str == 0) // All spaces?
+        return str;
+
+    // Trim trailing space
+    end = str + strlen(str) - 1;
+    while(end > str && isspace((unsigned char)*end)) end--;
+
+    // Write new null terminator
+    *(end+1) = '\0';
+
+    return str;
+}
+
+void processInput(const char *input_string, char **cmd, char **arg) {
+    // Duplicate the input string because strtok modifies the string
+    char *input_copy = strdup(input_string);
+    if (input_copy == NULL) {
+        fprintf(stderr, "Memory allocation failed\n");
+        exit(1);
+    }
+
+    // Tokenize the string
+    *cmd = strtok(input_copy, " ");
+    *arg = strtok(NULL, " ");
+
+    // Ensure both cmd and arg are properly null-terminated
+    if (*cmd != NULL) {
+        *cmd = strdup(*cmd);
+        if (*cmd == NULL) {
+            fprintf(stderr, "Memory allocation failed\n");
+            free(input_copy);
+            exit(1);
+        }
+    }
+
+    if (*arg != NULL) {
+        *arg = strdup(*arg);
+        if (*arg == NULL) {
+            fprintf(stderr, "Memory allocation failed\n");
+            free(input_copy);
+            free(*cmd);
+            exit(1);
+        }
+    }
+
+    // Free the duplicated input string
+    free(input_copy);
 }

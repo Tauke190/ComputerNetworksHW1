@@ -35,8 +35,12 @@ int main() {
         exit(EXIT_FAILURE);
     }
 
+     int value  = 1;
+	setsockopt(cmd_sock,SOL_SOCKET,SO_REUSEADDR,&value,sizeof(value)); //&(int){1},sizeof(int)
+
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = htons(CMD_PORT);
+    server_addr.sin_addr.s_addr = INADDR_ANY;
 
     if (inet_pton(AF_INET, SERVER_IP, &server_addr.sin_addr) <= 0) {
         perror("Invalid address/ Address not supported");
@@ -50,6 +54,7 @@ int main() {
         exit(EXIT_FAILURE);
     }
 
+
     if (read(cmd_sock, server_response, BUFFER_SIZE) > 0) {
         printf("%s\n", server_response);
     }
@@ -62,11 +67,11 @@ int main() {
         char *cmd = strtok(command, " ");   // First argument
         char *filename = strtok(NULL, " "); // Second argument
 
-        if(strcmp(cmd,"STOR")==0 && !file_exists(filename)){
-            printf("%s","File name does not exists , Try Again\n");
-            continue;
-        }
-        
+        // if(strcmp(cmd,"STOR")==0 && !file_exists(filename)){
+        //     printf("%s","File name does not exists , Try Again\n");
+        //     continue;
+        // }
+
         if (cmd && filename) {
             if (strcmp(cmd, "USER") == 0) {
                 char cmd_buffer[BUFFER_SIZE];  
@@ -79,7 +84,7 @@ int main() {
                 send(cmd_sock, cmd_buffer, strlen(cmd_buffer), 0);
             } 
             else if(strcmp(cmd, "STOR") == 0) {
-                
+                printf("%s\n","FROM Client STOR");
                 char cmd_buffer[BUFFER_SIZE];  
                 snprintf(cmd_buffer, sizeof(cmd_buffer), "STOR %s", filename);
                 send(cmd_sock, cmd_buffer, strlen(cmd_buffer), 0);
@@ -239,9 +244,7 @@ void upload_file(int data_sock, const char* filename) {
     int bytes_read;
 
     while ((bytes_read = fread(buffer, 1, BUFFER_SIZE, file)) > 0) {
-        // fwrite(buffer, 1, bytes_read, stdout);
         send(data_sock, buffer, bytes_read, 0);
-        
     }
 
     fclose(file);
@@ -263,7 +266,7 @@ void download_file(int data_sock, const char* filename) {
     while ((bytes_read = read(data_sock, buffer, BUFFER_SIZE)) > 0) {
         fwrite(buffer, 1, bytes_read, file);
     }
-
+    close(data_sock);
     fclose(file);
 }
 
