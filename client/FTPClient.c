@@ -5,6 +5,9 @@
 #include <arpa/inet.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <stdbool.h>
+#include <dirent.h>
+
 
 #define CMD_PORT 9002
 #define BUFFER_SIZE 1024
@@ -13,6 +16,11 @@
 void upload_file(int data_sock, const char* filename);
 void download_file(int data_sock, const char* filename);
 int handle_data_client(int cmd_sock);
+bool file_exists(const char *filename);
+void listFilesInCurrentDirectory();
+void displayCurrentDirectory();
+void handle_cd_command(char *command);
+
 
 int main() {
     int cmd_sock;
@@ -46,13 +54,17 @@ int main() {
     }
 
     while (1) {
-        printf("ftp-> ");
+        printf("%s","ftp-> ");
         fgets(command, BUFFER_SIZE, stdin);
         command[strcspn(command, "\n")] = '\0';  // Remove newline character
 
         char *cmd = strtok(command, " ");   // First argument
         char *filename = strtok(NULL, " "); // Second argument
 
+        if(strcmp(cmd,"STOR")==0 && !file_exists(filename)){
+            printf("%s","File name does not exists , Try Again\n");
+            continue;
+        }
 
         if (cmd && filename) {
             if (strcmp(cmd, "USER") == 0) {
@@ -63,7 +75,7 @@ int main() {
                 // char server_response[256]; //empty string
                 // recv(cmd_sock , &server_response , sizeof(server_response),0);
             } 
-            if (strcmp(cmd, "PASS") == 0) {
+            else if (strcmp(cmd, "PASS") == 0) {
                 char cmd_buffer[BUFFER_SIZE];  
                 snprintf(cmd_buffer, sizeof(cmd_buffer), "PASS %s", filename);
                 send(cmd_sock, cmd_buffer, strlen(cmd_buffer), 0);
@@ -72,25 +84,69 @@ int main() {
                 // recv(cmd_sock , &server_response , sizeof(server_response),0);
             } 
             else if(strcmp(cmd, "STOR") == 0) {
+                
                 char cmd_buffer[BUFFER_SIZE];  
                 snprintf(cmd_buffer, sizeof(cmd_buffer), "STOR %s", filename);
                 send(cmd_sock, cmd_buffer, strlen(cmd_buffer), 0);
 
-                int data_client_sock = handle_data_client(cmd_sock); // handle the data socket
-                upload_file(data_client_sock, filename);
-                close(data_client_sock);
+                char server_response[256]; //empty string
+                recv(cmd_sock , &server_response , sizeof(server_response),0);
+                printf("%s\n",server_response);
+                if(strcmp(server_response,"Valid User")==0){
+                    int data_client_sock = handle_data_client(cmd_sock); // handle the data socket
+                    upload_file(data_client_sock, filename);
+                    close(data_client_sock);
+                }
+                
             } 
             else if (strcmp(cmd, "RETR") == 0) {
                 char cmd_buffer[BUFFER_SIZE];  // Send to Server
                 snprintf(cmd_buffer, sizeof(cmd_buffer), "RETR %s", filename);
                 send(cmd_sock, cmd_buffer, strlen(cmd_buffer), 0);
-                int data_client_sock = handle_data_client(cmd_sock); // handle the data socket
-                download_file(data_client_sock, filename);
-                close(data_client_sock);
+              
+                char server_response[256]; //empty string
+                recv(cmd_sock , &server_response , sizeof(server_response),0);
+                printf("%s\n",server_response);
+                if(strcmp(server_response,"Valid User")==0){
+                    int data_client_sock = handle_data_client(cmd_sock); // handle the data socket
+                    download_file(data_client_sock, filename);
+                    close(data_client_sock);
+                }
+            } 
+            else if (strcmp(cmd, "CD") == 0) {
+                char cmd_buffer[BUFFER_SIZE];  
+                snprintf(cmd_buffer, sizeof(cmd_buffer), "CD %s", filename);
+                send(cmd_sock, cmd_buffer, strlen(cmd_buffer), 0);
+               
             }
-            
-        } else {
-            printf("Invalid command format. Use STOR <filename> or RETR <filename>.\n");
+        } else if(cmd){
+            if (strcmp(cmd, "LIST") == 0) {
+                char cmd_buffer[BUFFER_SIZE];  
+                snprintf(cmd_buffer, sizeof(cmd_buffer), "LIST %s", filename);
+                send(cmd_sock, cmd_buffer, strlen(cmd_buffer), 0);
+            }
+            else if (strcmp(cmd, "!LIST") == 0) {
+                listFilesInCurrentDirectory();
+                continue;
+            }
+            else if (strcmp(cmd, "PWD") == 0) {
+                char cmd_buffer[BUFFER_SIZE];  
+                snprintf(cmd_buffer, sizeof(cmd_buffer), "PWD %s", filename);
+                send(cmd_sock, cmd_buffer, strlen(cmd_buffer), 0);
+            }
+            else if (strcmp(cmd, "!PWD") == 0) {
+                displayCurrentDirectory();
+                continue; 
+            }
+            else if (strcmp(cmd, "!CD") == 0) {
+               handle_cd_command(filename);
+            } 
+            else if (strcmp(cmd, "!QUIT") == 0) {
+               break;
+            }
+        }
+        else{
+            printf("%s","Invalid command format. Use STOR <filename> or RETR <filename>.\n");
         }
 
         if (read(cmd_sock, server_response, BUFFER_SIZE) > 0) {
@@ -178,7 +234,7 @@ void upload_file(int data_sock, const char* filename) {
 
     fclose(file);
     close(data_sock);
-    printf("\nFile uploaded successfully.\n");
+    printf("%s","\nFile uploaded successfully.\n");
 }
 
 void download_file(int data_sock, const char* filename) {
@@ -198,4 +254,51 @@ void download_file(int data_sock, const char* filename) {
 
     fclose(file);
 }
+
+bool file_exists(const char *filename) {
+    FILE *file = fopen(filename, "r");
+    if (file) {
+        fclose(file);
+        return true;
+    }
+    return false;
+}
+
+void listFilesInCurrentDirectory() {
+    DIR *dir;
+    struct dirent *entry;
+
+    // Open the current directory
+    dir = opendir(".");
+    if (dir == NULL) {
+        perror("Unable to open directory");
+        exit(EXIT_FAILURE);
+    }
+
+    printf("%s","Files in current client directory:\n");
+
+    // Read the directory entries
+    while ((entry = readdir(dir)) != NULL) {
+        printf("%s\n", entry->d_name);
+    }
+	
+    // Close the directory
+    closedir(dir);
+}
+
+void displayCurrentDirectory() {
+    char buffer[1024]; // Buffer to hold the path
+    if (getcwd(buffer, sizeof(buffer)) != NULL) {
+        printf("Current Directory: %s\n", buffer);
+    } else {
+        perror("getcwd() error");
+    }
+}
+void handle_cd_command(char *command) {
+    if (chdir(command) < 0) {
+        perror("chdir failed");
+    }
+	
+}
+
 

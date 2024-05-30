@@ -414,8 +414,6 @@ void handleDataClient(int sock, char* client_message) {
 			send(sock , &server_message_7 , sizeof(server_message_7),0);
 		}
 	}
-
-
 }
 
 //Client downloads from the server
@@ -477,6 +475,63 @@ void send_files(int data_sock, char* filename) {
     printf("\nFile sent to client successfully successfully.\n");
 }
 
+bool checkUsernameExists(const char* username) {
+	char line[MAX_LENGTH * 2];
+    char user[MAX_LENGTH], pwd[MAX_LENGTH];
+
+    // Open the file
+    FILE *file = fopen("users.csv", "r");
+    if (file == NULL) {
+        perror("Error opening file");
+        return false;
+    }
+    
+    // Loop through each line in the file
+    while (fgets(line, sizeof(line), file)) {
+        // Parse the username and password from the line
+        sscanf(line, "%49[^,],%49s", user, pwd);
+        
+        // Check if the username matches
+        if (strcmp(user, username) == 0) {
+            fclose(file);
+            return true;
+        }
+    }
+    
+    // Close the file
+    fclose(file);
+    return false;
+}
+
+
+bool checkPasswordExists(const char* password){
+
+    char line[MAX_LENGTH * 2];
+    char user[MAX_LENGTH], pwd[MAX_LENGTH];
+    
+    // Open the file
+    FILE *file = fopen("users.csv", "r");
+    if (file == NULL) {
+        perror("Error opening file");
+        return false;
+    }
+    
+    // Loop through each line in the file
+    while (fgets(line, sizeof(line), file)) {
+        // Parse the username and password from the line
+        sscanf(line, "%49[^,],%49s", user, pwd);
+        
+        // Check if the password matches
+        if (strcmp(pwd, password) == 0) {
+            fclose(file);
+            return true;
+        }
+    }
+    
+    // Close the file
+    fclose(file);
+    return false;
+}
 
 void copyExcludingFirstCharacter(const char* original, char* result) {
     // Check if the original string is empty

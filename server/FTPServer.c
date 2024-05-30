@@ -8,6 +8,9 @@
 #include <sys/select.h>
 #include <sys/wait.h>
 #include <stdbool.h>
+#include <dirent.h>
+
+
 void loadUserFile();
 #define USERMAX 1024  // max number of users that can be read from file
 #define MAX_LENGTH 256
@@ -19,7 +22,13 @@ void handle_client(int cmd_sock);
 void handle_stor(int data_sock, const char* filename);
 void handle_retr(int data_sock, const char* filename);
 void ftpUserCmd(int i, char *resDat);
-void ftpPassCmd(int i, char *resDat);
+void ftpPassCmd(int i, char *resDat , char username[256]);
+bool isAuthenticated(int i) ;
+bool file_exists(const char *filename);
+char* listFilesInCurrentDirectory();
+char* getCurrentDirectoryPath();
+void handle_cd_command(char *command);
+
 
 
 struct ClientStruct{
@@ -114,6 +123,7 @@ int main() {
 
 void handle_client(int cmd_sock) {
     char buffer[BUFFER_SIZE];
+    char username[BUFFER_SIZE];
     int valread;
     struct sockaddr_in data_addr;
     int data_sock , data_port;
@@ -125,21 +135,29 @@ void handle_client(int cmd_sock) {
         char *cmd = strtok(buffer, " ");
         char *arg = strtok(NULL, " ");
 
+        chdir(listOfConnectedClients[cmd_sock].currDir);
+
         if (cmd) {
             if (strcmp(cmd, "USER") == 0) {
                 printf("Received USER command: %s\n", arg);
+                strcpy(username,arg);
                 ftpUserCmd(cmd_sock,arg); // arg = username
             }
             else if(strcmp(cmd, "PASS") == 0) {
                 printf("Received PASS command: %s\n", arg);
-                ftpPassCmd(cmd_sock,arg); // arg = password
+                ftpPassCmd(cmd_sock,arg,username); // arg = password
             }
             else if(strcmp(cmd, "PORT") == 0) {
+              if(isAuthenticated(cmd_sock)){
                 printf("Received PORT command: %s\n", arg);
                 int ip1, ip2, ip3, ip4, p1, p2;
                 sscanf(arg, "%d,%d,%d,%d,%d,%d", &ip1, &ip2, &ip3, &ip4, &p1, &p2);
                 data_port = p1 * 256 + p2;
                 printf("Data port %d:\n",data_port);
+
+                  // save
+                listOfConnectedClients[cmd_sock].userCurrentDataPort = data_port;
+                // listOfConnectedClients[i].clientIPAddr = ipAdr;
 
                 // Prepare data socket for connection
                 data_sock = socket(AF_INET, SOCK_STREAM, 0);
@@ -167,25 +185,92 @@ void handle_client(int cmd_sock) {
                 } 
                 close(data_sock);
                 // send(cmd_sock, "Data PORT closed \n", strlen("Data PORT closed \n"), 0);
-                
+              }
             } else if (strcmp(cmd, "STOR") == 0) {
-                printf("Received STOR command: %s\n", arg);
-                isupload = true;
-                strcpy(filename,arg);
-
+                 printf("Received STOR command: %s\n", arg);
+                 if (isAuthenticated(cmd_sock)) {
+                    isupload = true;
+                    strcpy(filename,arg);
+                    char corResponse[BUFFER_SIZE] = "Valid User";
+                    send(cmd_sock, corResponse, sizeof(corResponse), 0);
+                   
+                 }
+                 else{
+                    char corResponse[BUFFER_SIZE] = "530 Not logged in.";
+                    send(cmd_sock, corResponse, sizeof(corResponse), 0);
+                 }
             } else if (strcmp(cmd, "RETR") == 0) {
                 printf("Received RETR command: %s\n", arg);
-                isupload = false;
-                strcpy(filename,arg);
+                 if(isAuthenticated(cmd_sock)) {
+                    isupload = false;
+                    strcpy(filename,arg);
+                    
+                    if(file_exists(filename)){
+                      char corResponse[BUFFER_SIZE] = "Valid User";
+                      send(cmd_sock, corResponse, sizeof(corResponse), 0);
+                    }
+                    else{
+                      char corResponse[BUFFER_SIZE] = "File does not exists";
+                      send(cmd_sock, corResponse, sizeof(corResponse), 0);
+                    }
+                 }
+                 else{
+                    char corResponse[BUFFER_SIZE] = "530 Not logged in.";
+                    send(cmd_sock, corResponse, sizeof(corResponse), 0);
+                 }
+            } else if(strcmp(cmd, "LIST") == 0) {
+              printf("Received LIST command: %s\n", arg);
+
+                if(isAuthenticated(cmd_sock)){
+                  char *files = listFilesInCurrentDirectory();
+                  size_t length = strlen(files);
+                  files[length] = '\0';
+                  send(cmd_sock , files , length,0);
+                  free(files); // Don't forget to free the allocated memory
+                }
+                else{
+                    char corResponse[BUFFER_SIZE] = "530 Not logged in.";
+                    send(cmd_sock, corResponse, sizeof(corResponse), 0);
+                }
+            }
+             else if(strcmp(cmd, "PWD") == 0) {
+                if(isAuthenticated(cmd_sock)){
+                  printf("Received PWD command: %s\n", arg);
+                  char *files = getCurrentDirectoryPath();
+                  size_t length = strlen(files);
+                  files[length] = '\0';
+                  send(cmd_sock , files , length,0);
+                  free(files); // Don't forget to free the allocated memory
+                }
+                else{
+                    char corResponse[BUFFER_SIZE] = "530 Not logged in.";
+                    send(cmd_sock, corResponse, sizeof(corResponse), 0);
+                }
                
-            } else {
-                printf("Received unknown command: %s\n", cmd);
+            }
+            else if(strcmp(cmd, "CD") == 0) {
+              printf("Received LIST command: %s\n", arg);
+              if(isAuthenticated(cmd_sock)){
+                  handle_cd_command(arg);
+                  char corResponse[BUFFER_SIZE] = "Changed directory sucessfully /";
+                  strncat(corResponse, arg, BUFFER_SIZE - strlen(corResponse) - 1);
+                  send(cmd_sock, corResponse, sizeof(corResponse), 0);
+              }
+              else{
+                  char corResponse[BUFFER_SIZE] = "530 Not logged in.";
+                  send(cmd_sock, corResponse, sizeof(corResponse), 0);
+              }
+            }
+            else{
+
             }
         }
     }
 }
 
 void handle_stor(int data_sock, const char* filename) {
+
+  
     FILE *file = fopen(filename, "wb");
     if (!file) {
         perror("File open failed");
@@ -267,7 +352,7 @@ void ftpUserCmd(int i, char *resDat) {
 }
 
 // PASS command, i = socket
-void ftpPassCmd(int i, char *resDat) {
+void ftpPassCmd(int i, char *resDat , char username[256]) {
   // check if USER command is run first
   if (!listOfConnectedClients[i].username) {
     char corResponse[BUFFER_SIZE] = " 530 Not logged in.";
@@ -277,10 +362,88 @@ void ftpPassCmd(int i, char *resDat) {
     if (strcmp(resDat, accFile[listOfConnectedClients[i].userIndex].pw) == 0) {
       char corResponse[BUFFER_SIZE] = "230 User logged in, proceed.";
       listOfConnectedClients[i].password = true;
+      strcpy(listOfConnectedClients[i].currDir,username);
       send(i, corResponse, sizeof(corResponse), 0);
     } else {
       char corResponse[BUFFER_SIZE] = "530 Not logged in.";
       send(i, corResponse, sizeof(corResponse), 0);
     }
   }
+}
+
+bool isAuthenticated(int i) {
+  if (!listOfConnectedClients[i].password || !listOfConnectedClients[i].username) {
+    // not authenticated
+    return false;
+  }
+  return true;
+}
+
+bool file_exists(const char *filename) {
+    FILE *file = fopen(filename, "r");
+    if (file) {
+        fclose(file);
+        return true;
+    }
+    return false;
+
+}
+char* listFilesInCurrentDirectory() {
+    DIR *dir;
+    struct dirent *entry;
+    size_t buffer_size = 1024;
+    size_t buffer_length = 0;
+    char *result = malloc(buffer_size);
+    if (!result) {
+        perror("Unable to allocate memory");
+        exit(EXIT_FAILURE);
+    }
+    result[0] = '\0'; // Start with an empty string
+
+    dir = opendir(".");
+    if (dir == NULL) {
+        perror("Unable to open directory");
+        free(result);
+        exit(EXIT_FAILURE);
+    }
+    while ((entry = readdir(dir)) != NULL) {
+        size_t entry_length = strlen(entry->d_name) + 1; // +1 for the newline character
+        // Check if we need more space
+        if (buffer_length + entry_length + 1 > buffer_size) { // +1 for the null terminator
+            buffer_size *= 2; // Double the buffer size
+            result = realloc(result, buffer_size);
+            if (!result) {
+                perror("Unable to reallocate memory");
+                closedir(dir);
+                exit(EXIT_FAILURE);
+            }
+        }
+        strcat(result, entry->d_name);
+        strcat(result, "\n");
+        buffer_length += entry_length;
+    }
+    closedir(dir);
+    return result;
+}
+
+
+char* getCurrentDirectoryPath() {
+    char *buffer = malloc(BUFFER_SIZE);
+    if (buffer == NULL) {
+        perror("Unable to allocate buffer");
+        return NULL;
+    }
+    if (getcwd(buffer, BUFFER_SIZE) != NULL) {
+        return buffer;
+    } else {
+        perror("getcwd() error");
+        free(buffer);
+        return NULL;
+    }
+}
+
+void handle_cd_command(char *command) {
+    if (chdir(command) < 0) {
+        perror("chdir failed");
+    }
 }
