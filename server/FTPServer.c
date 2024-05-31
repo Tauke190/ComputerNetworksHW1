@@ -31,36 +31,38 @@ void handle_cd_command(char *command);
 char* trimWhitespace(char *str);
 void processInput(const char *input_string, char **cmd, char **arg);
 
-char * server_root;  // PATH_MAX is the maximum length of a path in the system
+char * server_root; 
 
 
 
-struct ClientStruct{
-    int userIndex;
-    int userCurrentDataPort;
+// 
+struct Client{
+    int indexofuser;
+    int userDataport;
     bool username;
     bool password;
     char currDir[256];
     char usernameString[256];
-    char *clientIDAddrs;
     bool hasauthenticated;
 
 };
 
-struct acc {
+struct Account {
   char user[256];
   char pw[256];
 };
 
-struct ClientStruct listOfConnectedClients[FD_SETSIZE];
-// variable to store accepted user accounts
-static struct acc accFile[USERMAX];
-// variable to hold the number of users read from file
+struct Client listOfConnectedClients[FD_SETSIZE];
+// this keeps track of the client data
+
+static struct Account AccountFile[USERMAX];
+
+// to keep track of the users
 int userCount = 0;
 
 int main()
 {
-  server_root  = getCurrentDirectoryPath();
+  server_root  = getCurrentDirectoryPath(); // Get the server root directory
   loadUserfromfile();
 
 	int server_socket = socket(AF_INET,SOCK_STREAM,0);
@@ -75,9 +77,9 @@ int main()
 
 	//setsock
 	int value  = 1;
-	setsockopt(server_socket,SOL_SOCKET,SO_REUSEADDR,&value,sizeof(value)); //&(int){1},sizeof(int)
+	setsockopt(server_socket,SOL_SOCKET,SO_REUSEADDR,&value,sizeof(value)); 
 	
-	//define server address structure
+
 	struct sockaddr_in server_address;
 	bzero(&server_address,sizeof(server_address));
 	server_address.sin_family = AF_INET;
@@ -85,14 +87,12 @@ int main()
 	server_address.sin_addr.s_addr = INADDR_ANY;
 
 
-	//bind
 	if(bind(server_socket, (struct sockaddr*)&server_address,sizeof(server_address))<0)
 	{
 		perror("bind failed");
 		exit(EXIT_FAILURE);
 	}
 
-	//listen
 	if(listen(server_socket,5)<0)
 	{
 		perror("listen failed");
@@ -126,22 +126,13 @@ int main()
 			exit(EXIT_FAILURE);
 		}
 
-		//when select returns, we know that one of our file descriptors has work for us to do
-		//but which one??
-		//select returns the fd_set containing JUST the file descriptors ready for reading
-		//(because select is destructive, so that is why we made the temp fd_set ready_sockets copy because we didn't want to lose the original set of file descriptors that we are watching)
-		
-		//to know which ones are ready, we have to loop through and check
-		//go from 0 to FD_SETSIZE (the largest number of file descriptors that we can store in an fd_set)
+
 		for(int fd = 0 ; fd < FD_SETSIZE; fd++)
 		{
 			//check to see if that fd is SET
 			if(FD_ISSET(fd,&ready_sockets))
 			{
-				//if it is set, that means that fd has data that we can read right now
-				//when this happens, we are interested in TWO CASES
-				//1st case: the fd is our server socket
-				//that means it is telling us there is a NEW CONNECTION that we can accept
+        // if the fd is the current server socket listening for new connection
 				if(fd==server_socket)
 				{
 					//accept that new connection
@@ -165,10 +156,8 @@ int main()
           if(bytes==0)   //client has closed the connection
           {
             printf("connection closed from client side \n");
-            //we are done, close fd
             close(fd);
-            //once we are done handling the connection, remove the socket from the list of file descriptors that we are watching
-            FD_CLR(fd,&all_sockets);
+            FD_CLR(fd,&all_sockets);  // remove the socket from the list of file descriptors that we are watching
           }
           else{
              handle_client(fd,buffer);
@@ -176,9 +165,7 @@ int main()
 				}
 			}
 		}
-
 	}
-
 	//close
   free(server_root);
 	close(server_socket);
@@ -202,7 +189,7 @@ void handle_client(int cmd_sock , char *buffer){
         if (isAuthenticated(cmd_sock)) {
             isupload = true;
             strcpy(filename,arg);
-            char corResponse[BUFFER_SIZE] = "Valid User";
+            char corResponse[BUFFER_SIZE] = "Valid User"; // If it is authenticated user
             send(cmd_sock, corResponse, sizeof(corResponse), 0);
         }
         else{
@@ -268,7 +255,7 @@ void handle_client(int cmd_sock , char *buffer){
                   sscanf(arg, "%d,%d,%d,%d,%d,%d", &ip1, &ip2, &ip3, &ip4, &p1, &p2);
                   data_port = p1 * 256 + p2;
                 
-                  listOfConnectedClients[cmd_sock].userCurrentDataPort = data_port;
+                  listOfConnectedClients[cmd_sock].userDataport = data_port;
                   // listOfConnectedClients[i].clientIPAddr = ipAdr;
 
                   // Prepare data socket for connection
@@ -437,7 +424,7 @@ void loadUserfromfile() {
   rewind(userFile);
   // store in the variable
   while (strCount < userCount + 1) {
-    fscanf(userFile, "%s %s", accFile[strCount].user, accFile[strCount].pw);
+    fscanf(userFile, "%s %s", AccountFile[strCount].user, AccountFile[strCount].pw);
     strCount += 1;
   }
 }
@@ -446,10 +433,10 @@ void handleUserCommand(int i, char *resDat) {
   bool foundDat = false;
   // loop to check if user exists
   for (int n = 0; n < userCount; n++) {
-    if (strcmp(resDat, accFile[n].user) == 0) {
+    if (strcmp(resDat, AccountFile[n].user) == 0) {
       // if found
       foundDat = true;
-      listOfConnectedClients[i].userIndex = n;  // found at nth pos in array
+      listOfConnectedClients[i].indexofuser = n;  // found at nth pos in array
       listOfConnectedClients[i].username = true;
       char corResponse[BUFFER_SIZE] = "331 Username OK, need password.";
       strcpy(listOfConnectedClients[i].usernameString,resDat);
@@ -472,7 +459,7 @@ void handlePassCommand(int i, char *resDat) {
     send(i, corResponse, sizeof(corResponse), 0);
   } else {
     // check if password is correct
-    if (strcmp(resDat, accFile[listOfConnectedClients[i].userIndex].pw) == 0) {
+    if (strcmp(resDat, AccountFile[listOfConnectedClients[i].indexofuser].pw) == 0) {
       char corResponse[BUFFER_SIZE] = "230 User logged in, proceed.";
       listOfConnectedClients[i].password = true;
    
