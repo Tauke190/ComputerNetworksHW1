@@ -127,8 +127,14 @@ int main() {
                 }
                 continue;
             } 
-            else{
-                printf("%s","Invalid command format. Use USER <username> PASS <password> STOR <filename> or RETR <filename>.\n");
+            else{ // if cmd and filename invalid
+                // printf("%s","Invalid command format. Use USER <username> PASS <password> STOR <filename> or RETR <filename>.\n");
+                char cmd_buffer[BUFFER_SIZE];  
+                snprintf(cmd_buffer, sizeof(cmd_buffer), "NOT %s", filename);
+                send(cmd_sock, cmd_buffer, strlen(cmd_buffer), 0);
+                char server_response[BUFFER_SIZE];  
+                recv(cmd_sock , &server_response , sizeof(server_response),0);
+                printf("%s\n",server_response);
                 continue;
             }
         } else if(cmd){
@@ -157,16 +163,20 @@ int main() {
                char server_response[BUFFER_SIZE];  
                recv(cmd_sock , &server_response , sizeof(server_response),0);
                printf("%s\n",server_response);
-
                break;
             }
-            else{
-                printf("%s","Invalid command format. Use USER <username> PASS <password> STOR <filename> or RETR <filename>.\n");
+            else{ // if cmd invalid
+                char cmd_buffer[BUFFER_SIZE];  
+                snprintf(cmd_buffer, sizeof(cmd_buffer), "INVALID %s", filename);
+                send(cmd_sock, cmd_buffer, strlen(cmd_buffer), 0);
+                char server_response[BUFFER_SIZE];  
+                recv(cmd_sock , &server_response , sizeof(server_response),0);
+                printf("%s\n",server_response);
                 continue;
             }
         }
         else{
-            printf("%s","Invalid command format. Use STOR <filename> or RETR <filename>.\n");
+          
         }
         if (read(cmd_sock, server_response, BUFFER_SIZE) > 0) {
             printf("%s\n", server_response);
@@ -226,7 +236,7 @@ int handle_data_client(int cmd_sock) {
         exit(EXIT_FAILURE);
     }
 
-    printf("150 File status okay ; about to open data connection: %d\n", data_port);
+     printf("150 File status okay ; about to open data connection : %d\n", data_port);
 
     // Accept the connection from the server
     int conn_sock = accept(data_sock, (struct sockaddr*)&data_address, &data_len);
@@ -235,6 +245,8 @@ int handle_data_client(int cmd_sock) {
         close(data_sock);
         exit(EXIT_FAILURE);
     }
+
+   
     close(data_sock);
     return conn_sock;
 }
@@ -256,7 +268,6 @@ void upload_file(int data_sock, const char* filename) {
 
     fclose(file);
     close(data_sock);
-    // printf("%s","\nFile uploaded successfully.\n");
 }
 
 void download_file(int data_sock, const char* filename) {

@@ -43,6 +43,7 @@ struct ClientStruct{
     char currDir[256];
     char usernameString[256];
     char *clientIDAddrs;
+    bool hasauthenticated;
 
 };
 
@@ -62,13 +63,6 @@ int main()
   server_root  = getCurrentDirectoryPath();
   loadUserfromfile();
 
-    for (int i = 0; i < 3; ++i) {
-        printf("Account %d:\n", i + 1);
-        printf("User: %s\n", accFile[i].user);
-        printf("Password: %s\n\n", accFile[i].pw);
-    }
-
-
 	int server_socket = socket(AF_INET,SOCK_STREAM,0);
 	printf("Server fd = %d \n",server_socket);
 	
@@ -78,7 +72,6 @@ int main()
 		perror("socket:");
 		exit(EXIT_FAILURE);
 	}
-
 
 	//setsock
 	int value  = 1;
@@ -156,7 +149,10 @@ int main()
 					printf("Client Connected fd = %d \n",client_sd);
 					//add the newly accepted socket to the set of all sockets that we are watching
 					FD_SET(client_sd,&all_sockets);
-          send(client_sd, "220 Service ready for new user", strlen("220 Service ready for new user"), 0);
+
+
+          char message[BUFFER_SIZE] = "220 Service ready for new use\nUSER <username>\nPASS <password>\nSTOR <filename>\nRETR <filename> \nLIST : List server directory files\n!LIST :List client directory files\nPWD : Show server path\n!PWD : Show client path \nCD : Change directory in server\n!CD : Change directory in client\n QUIT : quit ";
+          send(client_sd,message,sizeof(message),0);
 				}
 				//2nd case: when the socket that is ready to read from is one from the all_sockets fd_set
 				//in this case, we just want to read its data
@@ -321,7 +317,7 @@ void handle_client(int cmd_sock , char *buffer){
               chdir(server_root);
             }
             else{
-                char corResponse[BUFFER_SIZE] = "Invalid Directory";
+                char corResponse[BUFFER_SIZE] = "550 No Such file or directory";
                 send(cmd_sock, corResponse, sizeof(corResponse), 0);
             }
         }
@@ -334,7 +330,6 @@ void handle_client(int cmd_sock , char *buffer){
         if(isAuthenticated(cmd_sock)){
            printf("Received PWD command: %s\n", listOfConnectedClients[cmd_sock].currDir);
            send(cmd_sock, listOfConnectedClients[cmd_sock].currDir, sizeof(listOfConnectedClients[cmd_sock].currDir), 0);
-          // free(files); // Don't forget to free the allocated memory
         }
         else{
             char corResponse[BUFFER_SIZE] = "530 Not logged in.";
@@ -346,30 +341,43 @@ void handle_client(int cmd_sock , char *buffer){
         if(isAuthenticated(cmd_sock)){
             char checkdir[1024];
             checkdir[0] = '\0';
-            strcat(checkdir,listOfConnectedClients[cmd_sock].currDir);
+            strcpy(checkdir,listOfConnectedClients[cmd_sock].currDir);
             strcat(checkdir,"/");
             strcat(checkdir,arg);
             checkdir[strlen(checkdir)] = '\0';
 
-            printf("%s\n",checkdir);
+            
 
             if(chdir(checkdir) >= 0){
                strcat(listOfConnectedClients[cmd_sock].currDir,"/");
                strcat(listOfConnectedClients[cmd_sock].currDir,arg);
+               printf("%s\n",listOfConnectedClients[cmd_sock].currDir);
+
                char corResponse[BUFFER_SIZE] = "200 directory changed to /Users/";
                strcat(corResponse,listOfConnectedClients[cmd_sock].currDir);
                send(cmd_sock, corResponse, sizeof(corResponse), 0);
                chdir(server_root);
             }
             else{
-                char corResponse[BUFFER_SIZE] = "Invalid Directory";
+                char corResponse[BUFFER_SIZE] = "550 No Such file or directory";
                 send(cmd_sock, corResponse, sizeof(corResponse), 0);
             }
+        
         } else {
               char corResponse[BUFFER_SIZE] = "530 Not logged in.";
               send(cmd_sock, corResponse, sizeof(corResponse), 0);
           }
       }
+      if(strcmp(cmd, "NOT") == 0) {
+         printf("Received INVALID command: %s\n", arg);
+         char corResponse[BUFFER_SIZE] = "202 Command not implemented";
+         send(cmd_sock, corResponse, sizeof(corResponse), 0);
+     }
+      if(strcmp(cmd, "INVALID") == 0) {
+         printf("Received INVALID command: %s\n", arg);
+         char corResponse[BUFFER_SIZE] = "503 Bad Sequence of commands";
+         send(cmd_sock, corResponse, sizeof(corResponse), 0);
+     }
 }
 
 void handlefilestore(int data_sock, const char* filename) {
@@ -429,7 +437,7 @@ void loadUserfromfile() {
   rewind(userFile);
   // store in the variable
   while (strCount < userCount + 1) {
-    fscanf(userFile, "%s %s\n", accFile[strCount].user, accFile[strCount].pw);
+    fscanf(userFile, "%s %s", accFile[strCount].user, accFile[strCount].pw);
     strCount += 1;
   }
 }
@@ -482,7 +490,11 @@ bool isAuthenticated(int i) {
     return false; // return false 
   }
   else{
-    strcpy(listOfConnectedClients[i].currDir,listOfConnectedClients[i].usernameString);
+      if (!listOfConnectedClients[i].hasauthenticated){
+           strcpy(listOfConnectedClients[i].currDir,listOfConnectedClients[i].usernameString);
+           listOfConnectedClients[i].hasauthenticated = true;
+      }
+ 
     return true;
   }
   
