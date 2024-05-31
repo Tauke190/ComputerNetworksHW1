@@ -32,6 +32,8 @@ void handle_cd_command(char *command);
 char* trimWhitespace(char *str);
 void processInput(const char *input_string, char **cmd, char **arg);
 
+ char * server_root;  // PATH_MAX is the maximum length of a path in the system
+
 
 
 struct ClientStruct{
@@ -54,120 +56,10 @@ static struct acc accFile[USERMAX];
 // variable to hold the number of users read from file
 int userCount = 0;
 
-
-// int main() {
-
-//     int cmd_sock,new_cmd_sock;
-//     struct sockaddr_in server_addr, client_addr;
-//     socklen_t client_len = sizeof(client_addr);
-//     fd_set readfds;
-//     int max_sd;
-
-//     loadUserfromfile();
-
-
-//     // Create command socket
-//     if ((cmd_sock = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
-//         perror("Command socket creation failed");
-//         exit(EXIT_FAILURE);
-//     }
-//     printf("Server fd = %d \n",cmd_sock);
-
-//     int opt = 1;
-//     if (setsockopt(cmd_sock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt))) {
-//         perror("setsockopt");
-//         exit(EXIT_FAILURE);
-//     }
-
-//     server_addr.sin_family = AF_INET;
-//     server_addr.sin_addr.s_addr = INADDR_ANY;
-//     server_addr.sin_port = htons(CMD_PORT);
-
-//     if (bind(cmd_sock, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
-//         perror("Command socket bind failed");
-//         exit(EXIT_FAILURE);
-//     }
-
-//     if (listen(cmd_sock, 3) < 0) {
-//         perror("Command socket listen failed");
-//         exit(EXIT_FAILURE);
-//     }
-
-//     printf("FTP server listening on port %d for commands\n", CMD_PORT);
-
-//     //DECLARE 2 fd sets (file descriptor sets : a collection of file descriptors)
-//     fd_set all_sockets;
-//     fd_set ready_sockets;
-
-//     //zero out/iniitalize our set of all sockets
-//     FD_ZERO(&all_sockets);
-
-//     //adds one socket (the current socket) to the fd set of all sockets
-//     FD_SET(cmd_sock,&all_sockets);
-
-//     while (1) {
-     
-//         ready_sockets = all_sockets;
-
-//         if(select(FD_SETSIZE,&ready_sockets,NULL,NULL,NULL)<0)
-//         {
-//           perror("select error");
-//           exit(EXIT_FAILURE);
-//         }
-
-//         for(int fd = 0 ; fd < FD_SETSIZE; fd++)
-//         {
-//             if (FD_ISSET(cmd_sock, &ready_sockets)) 
-//             {
-
-//               //1st case: the fd is our server socket
-// 				      //that means it is telling us there is a NEW CONNECTION that we can accept
-//               if(fd==cmd_sock){
-//                   if ((new_cmd_sock = accept(cmd_sock, (struct sockaddr*)&client_addr, &client_len)) < 0) {
-//                       perror("Command socket accept failed");
-//                       exit(EXIT_FAILURE);
-//                   }
-//                     printf("New client conneceted = %d\n",new_cmd_sock);
-//                     FD_SET(new_cmd_sock,&all_sockets);
-//                     // handle_client(new_cmd_sock);
-//                     // send(new_cmd_sock, "220 Service ready for new user\n", strlen("220 Service ready for new user\n"), 0);
-//               } else { 	//2nd case: when the socket that is ready to to read from is one from the all_sockets fd_set
-
-//                   // handle_client(new_cmd_sock);
-//                   char buffer[256];
-//                   bzero(buffer,sizeof(buffer));
-//                   int bytes = recv(fd,buffer,sizeof(buffer),0);
-//                   if(bytes==0)   //client has closed the connection
-//                   {
-//                       printf("connection closed from client side \n");
-//                       //we are done, close fd
-//                       close(fd);
-//                       //once we are done handling the connection, remove the socket from the list of file descriptors that we are watching
-//                       FD_CLR(fd,&all_sockets); 
-//                   }
-//                   //displaying the message received 
-//                   printf("%s \n",buffer);
-//                 }
-//                 // if (fork() == 0) {
-//                 //     close(cmd_sock);
-//                 //     handle_client(new_cmd_sock);
-//                 //     close(new_cmd_sock);
-//                 //     exit(0);
-//                 // } else {
-//                 //     close(new_cmd_sock);
-//                 // }
-//             }
-          
-//         }
-//     }
-
-//     close(cmd_sock);
-//     return 0;
-// }
-
-
 int main()
 {
+  server_root  = getCurrentDirectoryPath();
+
 	int server_socket = socket(AF_INET,SOCK_STREAM,0);
 	printf("Server fd = %d \n",server_socket);
 	
@@ -268,6 +160,7 @@ int main()
           char buffer[256];
           bzero(buffer,sizeof(buffer));
           int bytes = recv(fd,buffer,sizeof(buffer),0);
+
           if(bytes==0)   //client has closed the connection
           {
             printf("connection closed from client side \n");
@@ -276,9 +169,9 @@ int main()
             //once we are done handling the connection, remove the socket from the list of file descriptors that we are watching
             FD_CLR(fd,&all_sockets);
           }
-          
-          handle_client(fd,buffer);
-         
+          else{
+             handle_client(fd,buffer);
+          }
 				}
 			}
 		}
@@ -286,6 +179,7 @@ int main()
 	}
 
 	//close
+  free(server_root);
 	close(server_socket);
 	return 0;
 }
@@ -302,10 +196,7 @@ void handle_client(int cmd_sock , char *buffer){
 
     char *cmd = NULL;
     char *arg = NULL;
-    processInput(buffer, &cmd, &arg);    
-
-    chdir(listOfConnectedClients[cmd_sock].currDir);
-
+    processInput(buffer, &cmd, &arg);
     if (strcmp(cmd, "STOR") == 0) 
     {
         printf("Received STOR command: %s\n", arg);
@@ -351,46 +242,47 @@ void handle_client(int cmd_sock , char *buffer){
         if(isAuthenticated(cmd_sock)){
            pid_t pid = fork();
           if(pid == 0) {
-              close(cmd_sock);
-              printf("Received PORT command: %s\n", arg);
-              int ip1, ip2, ip3, ip4, p1, p2;
-              sscanf(arg, "%d,%d,%d,%d,%d,%d", &ip1, &ip2, &ip3, &ip4, &p1, &p2);
-              data_port = p1 * 256 + p2;
-             
-              listOfConnectedClients[cmd_sock].userCurrentDataPort = data_port;
-              // listOfConnectedClients[i].clientIPAddr = ipAdr;
-
-              // Prepare data socket for connection
-              data_sock = socket(AF_INET, SOCK_STREAM, 0);
-              if (data_sock == 0) {
-                  perror("Data socket creation failed");   
-              }
-
-              data_addr.sin_family = AF_INET;
-              data_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
-              data_addr.sin_port = htons(data_port);
-
-              if (connect(data_sock, (struct sockaddr*)&data_addr, sizeof(data_addr)) < 0) {
-                  perror("Data socket connect failed");
-                  close(data_sock);
+                  close(cmd_sock);
+                  printf("Received PORT command: %s\n", arg);
+                  int ip1, ip2, ip3, ip4, p1, p2;
+                  sscanf(arg, "%d,%d,%d,%d,%d,%d", &ip1, &ip2, &ip3, &ip4, &p1, &p2);
+                  data_port = p1 * 256 + p2;
                 
-              }
-              printf("Data socked opened on port :%d\n",data_port);
-              // send(cmd_sock, "200 PORT Sucess: New data port open \n", strlen("2200 PORT Sucess: New data port open \n"), 0);
+                  listOfConnectedClients[cmd_sock].userCurrentDataPort = data_port;
+                  // listOfConnectedClients[i].clientIPAddr = ipAdr;
 
-              if(isupload){
-                  handlefilestore(data_sock, filename); 
-              }
-              else{
-                  handlefileretrieve(data_sock, filename); 
-              } 
-              // close(data_sock);
-              // send(cmd_sock, "Data PORT closed \n", strlen("Data PORT closed \n"), 0);
-              } 
+                  // Prepare data socket for connection
+                  data_sock = socket(AF_INET, SOCK_STREAM, 0);
+                  if (data_sock == 0) {
+                      perror("Data socket creation failed");   
+                  }
+
+                  data_addr.sin_family = AF_INET;
+                  data_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+                  data_addr.sin_port = htons(data_port);
+
+                  if (connect(data_sock, (struct sockaddr*)&data_addr, sizeof(data_addr)) < 0) {
+                      perror("Data socket connect failed");
+                      close(data_sock);
+                    
+                  }
+                  printf("Data socked opened on port :%d\n",data_port);
+                  // send(cmd_sock, "200 PORT Sucess: New data port open \n", strlen("2200 PORT Sucess: New data port open \n"), 0);
+
+
+                  chdir(listOfConnectedClients[cmd_sock].currDir);
+                  if(isupload){
+                      handlefilestore(data_sock, filename); 
+                  }
+                  else{
+                      handlefileretrieve(data_sock, filename); 
+                  }
+                  //send(cmd_sock, "Data PORT closed \n", strlen("Data PORT closed \n"), 0);
+                  close(data_sock);
+                }
+              chdir(server_root); 
+           
         }
-
-      
-      
     }
     if(strcmp(cmd, "LIST") == 0) {
       printf("Received LIST command: %s\n", arg);
@@ -409,40 +301,42 @@ void handle_client(int cmd_sock , char *buffer){
     }
     if(strcmp(cmd, "PWD") == 0) {
         if(isAuthenticated(cmd_sock)){
-          printf("Received PWD command: %s\n", arg);
-          char *files = getCurrentDirectoryPath();
-          size_t length = strlen(files);
-          files[length] = '\0';
-          send(cmd_sock , files , length,0);
-          free(files); // Don't forget to free the allocated memory
+           printf("Received PWD command: %s\n", listOfConnectedClients[cmd_sock].currDir);
+           send(cmd_sock, listOfConnectedClients[cmd_sock].currDir, sizeof(listOfConnectedClients[cmd_sock].currDir), 0);
+          // free(files); // Don't forget to free the allocated memory
         }
         else{
             char corResponse[BUFFER_SIZE] = "530 Not logged in.";
             send(cmd_sock, corResponse, sizeof(corResponse), 0);
         }
-        
     }
     if(strcmp(cmd, "CWD") == 0) {
       printf("Received LIST command: %s\n", arg);
         if(isAuthenticated(cmd_sock)){
-            handle_cd_command(arg);
-            char cwd[BUFFER_SIZE];
-            if (getcwd(cwd, sizeof(cwd)) != NULL) {
-              printf("Current working dir: %s\n", cwd);
-            } else {
-              perror("getcwd() error");
+            char checkdir[1024];
+            checkdir[0] = '\0';
+            strcat(checkdir,listOfConnectedClients[cmd_sock].currDir);
+            strcat(checkdir,"/");
+            strcat(checkdir,arg);
+            checkdir[strlen(checkdir)] = '\0';
+
+            printf("%s\n",checkdir);
+
+            if(chdir(checkdir) >= 0){
+               strcat(listOfConnectedClients[cmd_sock].currDir,"/");
+               strcat(listOfConnectedClients[cmd_sock].currDir,arg);
+               send(cmd_sock, listOfConnectedClients[cmd_sock].currDir, sizeof(listOfConnectedClients[cmd_sock].currDir), 0);
+               chdir(server_root);
             }
-            printf("%s",cwd);
-            char currentDir[BUFFER_SIZE] = "200 directory changed to server/";
-            strncat(currentDir, cwd, BUFFER_SIZE - strlen(currentDir) - 1);
-            send(cmd_sock, currentDir, sizeof(currentDir), 0);
+            else{
+                char corResponse[BUFFER_SIZE] = "Invalid Directory";
+                send(cmd_sock, corResponse, sizeof(corResponse), 0);
+            }
         } else {
               char corResponse[BUFFER_SIZE] = "530 Not logged in.";
               send(cmd_sock, corResponse, sizeof(corResponse), 0);
           }
       }
-     
-      
 }
 
 void handlefilestore(int data_sock, const char* filename) {
@@ -460,11 +354,11 @@ void handlefilestore(int data_sock, const char* filename) {
          fwrite(buffer, 1, bytes_read, file);
     }
     
-    close(data_sock);
     fclose(file);
 }
 
 void handlefileretrieve(int data_sock, const char* filename) {
+
     FILE *file = fopen(filename, "rb");
     if (!file) {
         perror("File open failed");
@@ -473,12 +367,11 @@ void handlefileretrieve(int data_sock, const char* filename) {
 
     char buffer[BUFFER_SIZE];
     int bytes_read;
-    
+
     while ((bytes_read = fread(buffer, 1, BUFFER_SIZE, file)) > 0) {
         write(data_sock, buffer, bytes_read);
     }
 
-    close(data_sock);
     fclose(file);
 }
 

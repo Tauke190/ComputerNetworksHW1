@@ -67,11 +67,10 @@ int main() {
         char *cmd = strtok(command, " ");   // First argument
         char *filename = strtok(NULL, " "); // Second argument
 
-        // if(strcmp(cmd,"STOR")==0 && !file_exists(filename)){
-        //     printf("%s","File name does not exists , Try Again\n");
-        //     continue;
-        // }
-
+        if(strcmp(cmd,"STOR")==0 && !file_exists(filename)){
+            printf("%s","File name does not exists , Try Again\n");
+            continue;
+        }
         if (cmd && filename) {
             if (strcmp(cmd, "USER") == 0) {
                 char cmd_buffer[BUFFER_SIZE];  
@@ -84,7 +83,6 @@ int main() {
                 send(cmd_sock, cmd_buffer, strlen(cmd_buffer), 0);
             } 
             else if(strcmp(cmd, "STOR") == 0) {
-                printf("%s\n","FROM Client STOR");
                 char cmd_buffer[BUFFER_SIZE];  
                 snprintf(cmd_buffer, sizeof(cmd_buffer), "STOR %s", filename);
                 send(cmd_sock, cmd_buffer, strlen(cmd_buffer), 0);
