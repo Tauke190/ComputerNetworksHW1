@@ -1,5 +1,4 @@
-```markdown
-# Readme file for the description of our project
+# Implementation of the File Transfer Protocol
 
 This GitHub repo contains the solution for Project 1 for the Computer Networks course taught by Professor Yasir Zaki at NYU Abu Dhabi. Here, we implement a simple file transfer protocol designed to handle multiple concurrent client connections and file transfers. The team members for this project are Avinash Gyawali and Aadim Nepal.
 
@@ -7,8 +6,8 @@ This GitHub repo contains the solution for Project 1 for the Computer Networks c
 
 In order to run the code in your terminal, please clone this repo. This can be achieved by:
 
-```bash
-git clone aadimnepal.com
+```
+git clone https://github.com/Tauke190/ComputerNetworksHW1.git
 ```
 
 After this, navigate to the server and client directories and inspect them closely. The server directory contains three subdirectories - `Bob`, `Harry`, and `Ron` - and a text file `users.txt`. The directories `Bob`, `Harry`, and `Ron` are for the authenticated users stored in the server. The `users.txt` file contains usernames and passwords that the server is assumed to have authenticated before running the program.
