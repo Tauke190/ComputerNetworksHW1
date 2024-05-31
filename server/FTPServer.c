@@ -11,7 +11,6 @@
 #include <dirent.h>
 #include <ctype.h>
 
-
 void loadUserfromfile();
 #define USERMAX 1024  // max number of users that can be read from file
 #define MAX_LENGTH 256
@@ -32,7 +31,7 @@ void handle_cd_command(char *command);
 char* trimWhitespace(char *str);
 void processInput(const char *input_string, char **cmd, char **arg);
 
- char * server_root;  // PATH_MAX is the maximum length of a path in the system
+char * server_root;  // PATH_MAX is the maximum length of a path in the system
 
 
 
@@ -61,6 +60,14 @@ int userCount = 0;
 int main()
 {
   server_root  = getCurrentDirectoryPath();
+  loadUserfromfile();
+
+    for (int i = 0; i < 3; ++i) {
+        printf("Account %d:\n", i + 1);
+        printf("User: %s\n", accFile[i].user);
+        printf("Password: %s\n\n", accFile[i].pw);
+    }
+
 
 	int server_socket = socket(AF_INET,SOCK_STREAM,0);
 	printf("Server fd = %d \n",server_socket);
@@ -72,7 +79,6 @@ int main()
 		exit(EXIT_FAILURE);
 	}
 
-  loadUserfromfile();
 
 	//setsock
 	int value  = 1;
@@ -156,8 +162,6 @@ int main()
 				//in this case, we just want to read its data
 				else
 				{
-      
-        
           char buffer[256];
           bzero(buffer,sizeof(buffer));
           int bytes = recv(fd,buffer,sizeof(buffer),0);
@@ -425,7 +429,7 @@ void loadUserfromfile() {
   rewind(userFile);
   // store in the variable
   while (strCount < userCount + 1) {
-    fscanf(userFile, "%s %s", accFile[strCount].user, accFile[strCount].pw);
+    fscanf(userFile, "%s %s\n", accFile[strCount].user, accFile[strCount].pw);
     strCount += 1;
   }
 }
@@ -470,7 +474,6 @@ void handlePassCommand(int i, char *resDat) {
       send(i, corResponse, sizeof(corResponse), 0);
     }
   }
-  
 }
 
 bool isAuthenticated(int i) {
