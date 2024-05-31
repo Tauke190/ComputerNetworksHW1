@@ -30,3 +30,6 @@ Avinash Gyawali
 
 We did most of our project on MacOS. The assignment mentions using PORT 21 and 20, but these were not free, so we used 9002. If, while running the code, at some point, you receive a "cannot bind to address" error, just navigate to `#DEFINE CMD_PORT 9002` and change 9002. You can try out different port numbers to see if this works. We also discussed a minor deviation on the implementation of the PORT command. For context, the client sends a PORT command to the server before initiating a new TCP connection for file transfer. We used the PORT that is free and provided by the OS itself, which means we don't implement N+i, but rather get a random free PORT at that time from the OS and use it to pass the PORT command. We discussed this with both the professor and TA, and both were fine with it.
 ```
+#define CMD_PORT 9003 // change this to a different value in case the code gives address error
+```
+
