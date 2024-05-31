@@ -9,7 +9,7 @@
 #include <dirent.h>
 
 
-#define CMD_PORT 9002
+#define CMD_PORT 9004
 #define BUFFER_SIZE 1024
 #define SERVER_IP "127.0.0.1"
 
