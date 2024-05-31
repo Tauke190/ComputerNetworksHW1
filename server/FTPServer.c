@@ -44,7 +44,6 @@ struct Client{
     char currDir[256];
     char usernameString[256];
     bool hasauthenticated;
-
 };
 
 struct Account {
@@ -126,7 +125,6 @@ int main()
 			exit(EXIT_FAILURE);
 		}
 
-
 		for(int fd = 0 ; fd < FD_SETSIZE; fd++)
 		{
 			//check to see if that fd is SET
@@ -141,8 +139,7 @@ int main()
 					//add the newly accepted socket to the set of all sockets that we are watching
 					FD_SET(client_sd,&all_sockets);
 
-
-          char message[BUFFER_SIZE] = "220 Service ready for new use\nUSER <username>\nPASS <password>\nSTOR <filename>\nRETR <filename> \nLIST : List server directory files\n!LIST :List client directory files\nPWD : Show server path\n!PWD : Show client path \nCD : Change directory in server\n!CD : Change directory in client\n QUIT : quit ";
+          char message[BUFFER_SIZE] = "220 Service ready for new use\nUSER <username>\nPASS <password>\nSTOR <filename>\nRETR <filename> \nLIST : List server directory files\n!LIST :List client directory files\nPWD : Show server path\n!PWD : Show client path \nCWD : Change directory in server\n!CWD : Change directory in client\n QUIT : quit ";
           send(client_sd,message,sizeof(message),0);
 				}
 				//2nd case: when the socket that is ready to read from is one from the all_sockets fd_set
@@ -156,8 +153,11 @@ int main()
           if(bytes==0)   //client has closed the connection
           {
             printf("connection closed from client side \n");
+            listOfConnectedClients[fd].username = false;
+            listOfConnectedClients[fd].username = false;
             close(fd);
             FD_CLR(fd,&all_sockets);  // remove the socket from the list of file descriptors that we are watching
+            
           }
           else{
              handle_client(fd,buffer);
@@ -213,7 +213,6 @@ void handle_client(int cmd_sock , char *buffer){
                 char corResponse[BUFFER_SIZE] = "File does not exists in the server";
                 send(cmd_sock, corResponse, sizeof(corResponse), 0);
             }
-           
           }
           else{
                 char corResponse[BUFFER_SIZE] = "Invalid Directory";
@@ -228,8 +227,8 @@ void handle_client(int cmd_sock , char *buffer){
     }
     if (strcmp(cmd, "USER") == 0) 
     {
+        listOfConnectedClients[cmd_sock].hasauthenticated = false;
         printf("Received USER command: %s\n", arg);
-        
         handleUserCommand(cmd_sock,arg); // arg = username
     }
     if(strcmp(cmd, "PASS") == 0) 
@@ -283,6 +282,7 @@ void handle_client(int cmd_sock , char *buffer){
                   else{
                       handlefileretrieve(data_sock, filename); 
                   }
+                  printf("Data socked closed on port :%d\n",data_port);
                   send(cmd_sock, "226 Transfer Completed \n", strlen("226 Transfer Completed \n"), 0);
                 }
               else{
@@ -478,13 +478,11 @@ bool isAuthenticated(int i) {
   }
   else{
       if (!listOfConnectedClients[i].hasauthenticated){
-           strcpy(listOfConnectedClients[i].currDir,listOfConnectedClients[i].usernameString);
-           listOfConnectedClients[i].hasauthenticated = true;
+          strcpy(listOfConnectedClients[i].currDir,listOfConnectedClients[i].usernameString);
+          listOfConnectedClients[i].hasauthenticated = true;
       }
- 
     return true;
   }
-  
 }
 
 bool file_exists(const char *filename) {
