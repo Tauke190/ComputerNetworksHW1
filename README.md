@@ -81,7 +81,3 @@ The code should handle concurrent connections smoothly.
   - We use a random free port provided by the OS instead of implementing `N+i`.
   - This approach was discussed and approved by both the professor and the TA.
 
-If you need to change the port:
-```c
-#define CMD_PORT 9003 // change this to a different value in case the code gives address error
-```
