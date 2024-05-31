@@ -87,11 +87,20 @@ int main() {
                 snprintf(cmd_buffer, sizeof(cmd_buffer), "STOR %s", filename);
                 send(cmd_sock, cmd_buffer, strlen(cmd_buffer), 0);
 
+                char new_response[256]; //empty string
+                recv(cmd_sock , &new_response , sizeof(new_response),0);
+                printf("%s\n",new_response);
+
+                send(cmd_sock, cmd_buffer, strlen(cmd_buffer), 0);
+                
                 char server_response[256]; //empty string
                 recv(cmd_sock , &server_response , sizeof(server_response),0);
                 printf("%s\n",server_response);
-             
+
+            
                 if(strcmp(server_response,"Valid User") == 0 ) {
+                  
+              
                     int data_client_sock = handle_data_client(cmd_sock); // handle the data socket
                     upload_file(data_client_sock, filename);
                     close(data_client_sock);

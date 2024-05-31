@@ -121,7 +121,7 @@ int main()
 
 		if(select(FD_SETSIZE,&ready_sockets,NULL,NULL,NULL)<0)
 		{
-			perror("select error");
+			// perror("select error");
 			exit(EXIT_FAILURE);
 		}
 
@@ -188,14 +188,17 @@ void handle_client(int cmd_sock , char *buffer){
         if (isAuthenticated(cmd_sock)) {
             isupload = true;
             strcpy(filename,arg);
+          
+            send(cmd_sock, "200 PORT command successful\n", strlen("200 PORT command successful\n"), 0);
+            char new_response[256]; //empty string
+            recv(cmd_sock , &new_response , sizeof(new_response),0);
             char corResponse[BUFFER_SIZE] = "Valid User"; // If it is authenticated user
             send(cmd_sock, corResponse, sizeof(corResponse), 0);
-            send(cmd_sock, "200 PORT command successful\n", strlen("200 PORT command successful\n"), 0);
+           
         }
         else{
           char corResponse[BUFFER_SIZE] = "530 Not logged in.";
           send(cmd_sock, corResponse, sizeof(corResponse), 0);
-      
 
         }
     }
@@ -253,7 +256,6 @@ void handle_client(int cmd_sock , char *buffer){
            sscanf(arg, "%d,%d,%d,%d,%d,%d", &ip1, &ip2, &ip3, &ip4, &p1, &p2);
            data_port = p1 * 256 + p2;        
            listOfConnectedClients[cmd_sock].userDataport = data_port;
-      
 
           pid_t pid = fork();
           if(pid == 0) {
@@ -261,7 +263,8 @@ void handle_client(int cmd_sock , char *buffer){
                 printf("Received PORT command: %s\n", arg);
                 // Prepare data socket for connection
                 data_sock = socket(AF_INET, SOCK_STREAM, 0);
-                if (data_sock == 0) {
+
+                if (data_sock == -1) {
                     perror("Data socket creation failed");   
                 }
 
@@ -269,14 +272,28 @@ void handle_client(int cmd_sock , char *buffer){
                 data_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
                 data_addr.sin_port = htons(data_port);
 
+                int reuse = 1;
+                if (setsockopt(data_sock, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) < 0) {
+                  perror("setsockopt(SO_REUSEADDR) failed");
+                  exit(EXIT_FAILURE);
+                }
+
+                struct sockaddr_in server_addr;
+                server_addr.sin_family = AF_INET;
+                server_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+                server_addr.sin_port = htons(5020);
+
+                if(bind(data_sock, (struct sockaddr *)&server_addr, sizeof(server_addr)) == -1) {
+                    printf("Error: socket bind failed.\n");
+                    exit(0);
+                }
+
                 if (connect(data_sock, (struct sockaddr*)&data_addr, sizeof(data_addr)) < 0) {
                     perror("Data socket connect failed");
-                    close(data_sock);
-                  
+                    close(data_sock);  
                 }
+                
                 printf("Data socked opened on port :%d\n",data_port);
-               
-
                 chdir(listOfConnectedClients[cmd_sock].currDir);
                 if(isupload){
                     handlefilestore(data_sock, filename); 
@@ -287,7 +304,7 @@ void handle_client(int cmd_sock , char *buffer){
                 printf("Data socked closed on port :%d\n",data_port);
                 send(cmd_sock, "226 Transfer Completed \n", strlen("226 Transfer Completed \n"), 0);
               }
-              else{ // else if parent directory
+              else { // else if parent directory
                 close(data_sock);
                 chdir(server_root); 
               }
