@@ -278,21 +278,30 @@ void handle_client(int cmd_sock , char *buffer){
                       handlefileretrieve(data_sock, filename); 
                   }
                   //send(cmd_sock, "Data PORT closed \n", strlen("Data PORT closed \n"), 0);
-                  close(data_sock);
                 }
-              chdir(server_root); 
-           
+              else{
+                  close(data_sock);
+                  chdir(server_root); 
+              }
         }
     }
     if(strcmp(cmd, "LIST") == 0) {
       printf("Received LIST command: %s\n", arg);
 
         if(isAuthenticated(cmd_sock)){
-          char *files = listFilesInCurrentDirectory();
-          size_t length = strlen(files);
-          files[length] = '\0';
-          send(cmd_sock , files , length,0);
-          free(files); // Don't forget to free the allocated memory
+
+            if(chdir(listOfConnectedClients[cmd_sock].currDir) >= 0){
+              char *files = listFilesInCurrentDirectory();
+              size_t length = strlen(files);
+              files[length] = '\0';
+              send(cmd_sock , files , length,0);
+              free(files); // Don't forget to free the allocated memory
+              chdir(server_root);
+            }
+            else{
+                char corResponse[BUFFER_SIZE] = "Invalid Directory";
+                send(cmd_sock, corResponse, sizeof(corResponse), 0);
+            }
         }
         else{
             char corResponse[BUFFER_SIZE] = "530 Not logged in.";
@@ -353,7 +362,7 @@ void handlefilestore(int data_sock, const char* filename) {
     while ((bytes_read = read(data_sock, buffer, BUFFER_SIZE)) > 0) {
          fwrite(buffer, 1, bytes_read, file);
     }
-    
+  
     fclose(file);
 }
 
@@ -371,10 +380,9 @@ void handlefileretrieve(int data_sock, const char* filename) {
     while ((bytes_read = fread(buffer, 1, BUFFER_SIZE, file)) > 0) {
         write(data_sock, buffer, bytes_read);
     }
-
+    
     fclose(file);
 }
-
 
 void loadUserfromfile() {
   FILE *userFile = fopen("users.txt", "r");
@@ -445,7 +453,7 @@ void handlePassCommand(int i, char *resDat , char username[256]) {
 bool isAuthenticated(int i) {
   if (!listOfConnectedClients[i].password || !listOfConnectedClients[i].username) {
     // not authenticated
-    return true; // return false 
+    return false; // return false 
   }
   return true;
 }
@@ -457,8 +465,8 @@ bool file_exists(const char *filename) {
         return true;
     }
     return false;
-
 }
+
 char* listFilesInCurrentDirectory() {
     DIR *dir;
     struct dirent *entry;
