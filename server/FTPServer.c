@@ -220,16 +220,19 @@ void handle_client(int cmd_sock , char *buffer){
               strcpy(filename,arg);
               char corResponse[BUFFER_SIZE] = "Valid User";
               send(cmd_sock, corResponse, sizeof(corResponse), 0);
+             
             }
             else{
                 char corResponse[BUFFER_SIZE] = "File does not exists in the server";
                 send(cmd_sock, corResponse, sizeof(corResponse), 0);
             }
+           
           }
           else{
                 char corResponse[BUFFER_SIZE] = "Invalid Directory";
                 send(cmd_sock, corResponse, sizeof(corResponse), 0);
           }
+          chdir(server_root);
       }
       else{
         char corResponse[BUFFER_SIZE] = "530 Not logged in.";
@@ -241,6 +244,11 @@ void handle_client(int cmd_sock , char *buffer){
         printf("Received USER command: %s\n", arg);
         strcpy(username,arg);
         handleUserCommand(cmd_sock,arg); // arg = username
+    }
+    if(strcmp(cmd, "PASS") == 0) 
+    {
+        printf("Received PASS command: %s\n", arg);
+        handlePassCommand(cmd_sock,arg,username); // arg = password
     }
     if(strcmp(cmd, "PORT") == 0) 
     {
@@ -273,7 +281,9 @@ void handle_client(int cmd_sock , char *buffer){
                     
                   }
                   printf("Data socked opened on port :%d\n",data_port);
-                  // send(cmd_sock, "200 PORT command successful \n", strlen("200 PORT command successful \n"), 0);
+                  // send(cmd_sock, "200 PORT Sucess: New data port open \n", strlen("2200 PORT Sucess: New data port open \n"), 0);
+
+
                   chdir(listOfConnectedClients[cmd_sock].currDir);
                   if(isupload){
                       handlefilestore(data_sock, filename); 
@@ -316,6 +326,7 @@ void handle_client(int cmd_sock , char *buffer){
         if(isAuthenticated(cmd_sock)){
            printf("Received PWD command: %s\n", listOfConnectedClients[cmd_sock].currDir);
            send(cmd_sock, listOfConnectedClients[cmd_sock].currDir, sizeof(listOfConnectedClients[cmd_sock].currDir), 0);
+          // free(files); // Don't forget to free the allocated memory
         }
         else{
             char corResponse[BUFFER_SIZE] = "530 Not logged in.";
@@ -335,12 +346,10 @@ void handle_client(int cmd_sock , char *buffer){
             printf("%s\n",checkdir);
 
             if(chdir(checkdir) >= 0){
-              strcat(listOfConnectedClients[cmd_sock].currDir,"/");
-              strcat(listOfConnectedClients[cmd_sock].currDir,arg);
-              char corResponse[BUFFER_SIZE] = "200 directory changed to /";
-              strcat(corResponse,listOfConnectedClients[cmd_sock].currDir);
-              send(cmd_sock, corResponse, sizeof(corResponse), 0);
-              chdir(server_root);
+               strcat(listOfConnectedClients[cmd_sock].currDir,"/");
+               strcat(listOfConnectedClients[cmd_sock].currDir,arg);
+               send(cmd_sock, listOfConnectedClients[cmd_sock].currDir, sizeof(listOfConnectedClients[cmd_sock].currDir), 0);
+               chdir(server_root);
             }
             else{
                 char corResponse[BUFFER_SIZE] = "Invalid Directory";
@@ -352,6 +361,7 @@ void handle_client(int cmd_sock , char *buffer){
           }
       }
 }
+
 void handlefilestore(int data_sock, const char* filename) {
 
     FILE *file = fopen(filename, "wb");
@@ -510,6 +520,7 @@ char* listFilesInCurrentDirectory() {
     closedir(dir);
     return result;
 }
+
 
 char* getCurrentDirectoryPath() {
     char *buffer = malloc(BUFFER_SIZE);
