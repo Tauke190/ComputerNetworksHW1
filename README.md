@@ -4,32 +4,84 @@ This GitHub repo contains the solution for Project 1 for the Computer Networks c
 
 ## Running the Repo
 
-In order to run the code in your terminal, please clone this repo. This can be achieved by:
+To run the code in your terminal, please follow these steps:
 
-```
-git clone https://github.com/Tauke190/ComputerNetworksHW1.git
-```
+1. **Clone the Repository:**
 
-After this, navigate to the server and client directories and inspect them closely. The server directory contains three subdirectories - `Bob`, `Harry`, and `Ron` - and a text file `users.txt`. The directories `Bob`, `Harry`, and `Ron` are for the authenticated users stored in the server. The `users.txt` file contains usernames and passwords that the server is assumed to have authenticated before running the program.
+   ```bash
+   git clone https://github.com/Tauke190/ComputerNetworksHW1.git
+   ```
+
+2. **Navigate to the Server and Client Directories:**
+   
+   Inspect the directories closely. The server directory contains:
+   - Three subdirectories: `Bob`, `Harry`, and `Ron`
+   - A text file: `users.txt`
+
+   The subdirectories `Bob`, `Harry`, and `Ron` are for the authenticated users stored on the server. The `users.txt` file contains usernames and passwords that the server authenticates before running the program.
 
 ## How to Proceed
 
-Open four terminals, one for the server, and the rest for `Bob`, `Harry`, and `Ron`. In order to run the server code, navigate to the server directory by doing `cd server`, and compile the makefile. After doing this, navigate to another terminal, `cd client`, and run the makefile again for all three clients. You are ready to start authenticating. The procedures for authentication will be displayed by the terminal itself after you run. In short, you must proceed by inputting `USER <username>`, `PASS <password>`, and then can do `RETR <filename>`, `STOR <filename>`, `CWD <directory>`, `!CWD <directory>`, `LIST <directory>`, `!LIST <directory>`, `QUIT`. The code must handle concurrent connections smoothly.
+1. **Open Four Terminals:**
+   - One for the server
+   - Three for the clients: `Bob`, `Harry`, and `Ron`
+
+2. **Run the Server Code:**
+   - Navigate to the server directory:
+     ```bash
+     cd server
+     ```
+   - Compile the makefile.
+
+3. **Run the Client Code:**
+   - In each client terminal, navigate to the client directory:
+     ```bash
+     cd client
+     ```
+   - Compile the makefile for all three clients.
+
+4. **Start Authenticating:**
+   - Follow the procedures displayed by the terminal. Typically, you will input:
+     - `USER <username>`
+     - `PASS <password>`
+     - Commands like `RETR <filename>`, `STOR <filename>`, `CWD <directory>`, `!CWD <directory>`, `LIST <directory>`, `!LIST <directory>`, `QUIT`
+
+The code should handle concurrent connections smoothly.
 
 ## Limitations and Assumptions
 
-Due to time constraints, we were not able to handle all the edge cases. We assume that once the client changes the server directory, it cannot revert. Similarly, once you change the client directory, you cannot revert. Additionally, if the client attempts to send a filename that already exists, the new file overwrites the existing file. Moreover, in our `users.txt` file, we assume that there is a delimiter at the end. For our case, we have "-------" at the end, just for the ease of loading this content into our code. So if you plan to design `users.txt` on your own, make sure that the username and password for each user is on one line and separated by one space, with a delimiter at the end of the file. For instance:
+- **Directory Changes:**
+  - Once the client changes the server directory, it cannot revert.
+  - Once you change the client directory, you cannot revert.
 
-```
-Aadim Nepal
-Avinash Gyawali
-----------------
-```
+- **File Overwrites:**
+  - If the client attempts to send a filename that already exists, the new file overwrites the existing file.
+
+- **Users.txt Format:**
+  - The `users.txt` file should have a delimiter at the end ("-------") for ease of loading into the code.
+  - Each username and password pair should be on one line, separated by a space, with a delimiter at the end of the file. Example:
+    ```
+    Aadim Nepal
+    Avinash Gyawali
+    ----------------
+    ```
 
 ## Design Choice for Port
 
-We did most of our project on MacOS. The assignment mentions using PORT 21 and 20, but these were not free, so we used 9002. If, while running the code, at some point, you receive a "cannot bind to address" error, just navigate to `#DEFINE CMD_PORT 9002` and change 9002. You can try out different port numbers to see if this works. We also discussed a minor deviation on the implementation of the PORT command. For context, the client sends a PORT command to the server before initiating a new TCP connection for file transfer. We used the PORT that is free and provided by the OS itself, which means we don't implement N+i, but rather get a random free PORT at that time from the OS and use it to pass the PORT command. We discussed this with both the professor and TA, and both were fine with it.
-```
+- **Port Selection:**
+  - We used port `9002` instead of the default ports `21` and `20` due to availability issues on MacOS.
+  - If you encounter a "cannot bind to address" error, change the port by navigating to:
+    ```c
+    #DEFINE CMD_PORT 9002
+    ```
+    - You can try different port numbers if necessary.
+
+- **Implementation of PORT Command:**
+  - The client sends a PORT command to the server before initiating a new TCP connection for file transfer.
+  - We use a random free port provided by the OS instead of implementing `N+i`.
+  - This approach was discussed and approved by both the professor and the TA.
+
+If you need to change the port:
+```c
 #define CMD_PORT 9003 // change this to a different value in case the code gives address error
 ```
-
