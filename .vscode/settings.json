@@ -9,6 +9,7 @@
         "unistd.h": "c",
         "dirent.h": "c",
         "string_stack.h": "c",
-        "select.h": "c"
+        "select.h": "c",
+        "complex": "c"
     }
 }

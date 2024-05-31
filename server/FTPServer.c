@@ -23,7 +23,7 @@ void handle_client(int cmd_sock , char buffer[BUFFER_SIZE]);
 void handlefilestore(int data_sock, const char* filename);
 void handlefileretrieve(int data_sock, const char* filename);
 void handleUserCommand(int i, char *resDat);
-void handlePassCommand(int i, char *resDat , char username[256]);
+void handlePassCommand(int i, char *resDat);
 bool isAuthenticated(int i) ;
 bool file_exists(const char *filename);
 char* listFilesInCurrentDirectory();
@@ -42,7 +42,9 @@ struct ClientStruct{
     bool username;
     bool password;
     char currDir[256];
+    char usernameString[256];
     char *clientIDAddrs;
+
 };
 
 struct acc {
@@ -148,8 +150,7 @@ int main()
 					printf("Client Connected fd = %d \n",client_sd);
 					//add the newly accepted socket to the set of all sockets that we are watching
 					FD_SET(client_sd,&all_sockets);
-          send(client_sd, "220 Service ready for new user\n", strlen("220 Service ready for new user\n"), 0);
-        
+          send(client_sd, "220 Service ready for new user", strlen("220 Service ready for new user"), 0);
 				}
 				//2nd case: when the socket that is ready to read from is one from the all_sockets fd_set
 				//in this case, we just want to read its data
@@ -186,7 +187,6 @@ int main()
 
 
 void handle_client(int cmd_sock , char *buffer){
-    char username[BUFFER_SIZE];
     struct sockaddr_in data_addr;
     int data_sock , data_port;
 
@@ -242,13 +242,19 @@ void handle_client(int cmd_sock , char *buffer){
     if (strcmp(cmd, "USER") == 0) 
     {
         printf("Received USER command: %s\n", arg);
-        strcpy(username,arg);
+        
         handleUserCommand(cmd_sock,arg); // arg = username
     }
     if(strcmp(cmd, "PASS") == 0) 
     {
         printf("Received PASS command: %s\n", arg);
-        handlePassCommand(cmd_sock,arg,username); // arg = password
+        handlePassCommand(cmd_sock,arg); // arg = password
+    }
+    if(strcmp(cmd, "QUIT") == 0) 
+    {
+      printf("Received QUIT command: %s\n", arg);
+      char corResponse[BUFFER_SIZE] = "221 Service closing control connection\n";
+      send(cmd_sock, corResponse, sizeof(corResponse), 0);
     }
     if(strcmp(cmd, "PORT") == 0) 
     {
@@ -281,8 +287,7 @@ void handle_client(int cmd_sock , char *buffer){
                     
                   }
                   printf("Data socked opened on port :%d\n",data_port);
-                  // send(cmd_sock, "200 PORT Sucess: New data port open \n", strlen("2200 PORT Sucess: New data port open \n"), 0);
-
+                  send(cmd_sock, "200 PORT command successful\n", strlen("200 PORT command successful\n"), 0);
 
                   chdir(listOfConnectedClients[cmd_sock].currDir);
                   if(isupload){
@@ -291,7 +296,7 @@ void handle_client(int cmd_sock , char *buffer){
                   else{
                       handlefileretrieve(data_sock, filename); 
                   }
-                  //send(cmd_sock, "Data PORT closed \n", strlen("Data PORT closed \n"), 0);
+                  send(cmd_sock, "226 Transfer Completed \n", strlen("226 Transfer Completed \n"), 0);
                 }
               else{
                   close(data_sock);
@@ -303,7 +308,6 @@ void handle_client(int cmd_sock , char *buffer){
       printf("Received LIST command: %s\n", arg);
 
         if(isAuthenticated(cmd_sock)){
-
             if(chdir(listOfConnectedClients[cmd_sock].currDir) >= 0){
               char *files = listFilesInCurrentDirectory();
               size_t length = strlen(files);
@@ -348,7 +352,9 @@ void handle_client(int cmd_sock , char *buffer){
             if(chdir(checkdir) >= 0){
                strcat(listOfConnectedClients[cmd_sock].currDir,"/");
                strcat(listOfConnectedClients[cmd_sock].currDir,arg);
-               send(cmd_sock, listOfConnectedClients[cmd_sock].currDir, sizeof(listOfConnectedClients[cmd_sock].currDir), 0);
+               char corResponse[BUFFER_SIZE] = "200 directory changed to /Users/";
+               strcat(corResponse,listOfConnectedClients[cmd_sock].currDir);
+               send(cmd_sock, corResponse, sizeof(corResponse), 0);
                chdir(server_root);
             }
             else{
@@ -434,6 +440,7 @@ void handleUserCommand(int i, char *resDat) {
       listOfConnectedClients[i].userIndex = n;  // found at nth pos in array
       listOfConnectedClients[i].username = true;
       char corResponse[BUFFER_SIZE] = "331 Username OK, need password.";
+      strcpy(listOfConnectedClients[i].usernameString,resDat);
       send(i, corResponse, sizeof(corResponse), 0);
       break;
     }
@@ -446,7 +453,7 @@ void handleUserCommand(int i, char *resDat) {
 }
 
 // PASS command, i = socket
-void handlePassCommand(int i, char *resDat , char username[256]) {
+void handlePassCommand(int i, char *resDat) {
   // check if USER command is run first
   if (!listOfConnectedClients[i].username) {
     char corResponse[BUFFER_SIZE] = " 530 Not logged in.";
@@ -456,7 +463,7 @@ void handlePassCommand(int i, char *resDat , char username[256]) {
     if (strcmp(resDat, accFile[listOfConnectedClients[i].userIndex].pw) == 0) {
       char corResponse[BUFFER_SIZE] = "230 User logged in, proceed.";
       listOfConnectedClients[i].password = true;
-      strcpy(listOfConnectedClients[i].currDir,username);
+   
       send(i, corResponse, sizeof(corResponse), 0);
     } else {
       char corResponse[BUFFER_SIZE] = "530 Not logged in.";
@@ -471,7 +478,11 @@ bool isAuthenticated(int i) {
     // not authenticated
     return false; // return false 
   }
-  return true;
+  else{
+    strcpy(listOfConnectedClients[i].currDir,listOfConnectedClients[i].usernameString);
+    return true;
+  }
+  
 }
 
 bool file_exists(const char *filename) {
