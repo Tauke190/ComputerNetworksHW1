@@ -9,7 +9,7 @@
 #include <dirent.h>
 
 
-#define CMD_PORT 9004
+#define CMD_PORT 9005
 #define BUFFER_SIZE 1024
 #define SERVER_IP "127.0.0.1"
 
@@ -89,14 +89,14 @@ int main() {
 
                 char server_response[256]; //empty string
                 recv(cmd_sock , &server_response , sizeof(server_response),0);
-                // printf("%s\n",server_response);
-                if(strcmp(server_response,"Valid User")==0){
+                printf("%s\n",server_response);
+             
+                if(strcmp(server_response,"Valid User") == 0 ) {
                     int data_client_sock = handle_data_client(cmd_sock); // handle the data socket
                     upload_file(data_client_sock, filename);
                     close(data_client_sock);
                     printf("226 Transfer completed: %d\n", data_port);
                 }
-                
             } 
             else if (strcmp(cmd, "RETR") == 0) {
                 char cmd_buffer[BUFFER_SIZE];  // Send to Server
@@ -105,7 +105,7 @@ int main() {
               
                 char server_response[256]; //empty string
                 recv(cmd_sock , &server_response , sizeof(server_response),0);
-                printf("%s\n",server_response);
+                // printf("%s\n",server_response);
                 if(strcmp(server_response,"Valid User")==0){
                     int data_client_sock = handle_data_client(cmd_sock); // handle the data socket
                     download_file(data_client_sock, filename);
@@ -182,7 +182,6 @@ int main() {
             printf("%s\n", server_response);
         }
     }
-
     close(cmd_sock);
     return 0;
 }
@@ -228,7 +227,7 @@ int handle_data_client(int cmd_sock) {
     send(cmd_sock, commandbuffer, strlen(commandbuffer), 0);
 
     char server_response[256]; //empty string
-    printf("200 PORT command successful: %d\n", data_port);
+    // printf("200 PORT command successful: %d\n", data_port);
 
     if (listen(data_sock, 1) < 0) {
         perror("Data socket listen failed");
@@ -236,7 +235,7 @@ int handle_data_client(int cmd_sock) {
         exit(EXIT_FAILURE);
     }
 
-     printf("150 File status okay ; about to open data connection : %d\n", data_port);
+    //  printf("150 File status okay ; about to open data connection : %d\n", data_port);
 
     // Accept the connection from the server
     int conn_sock = accept(data_sock, (struct sockaddr*)&data_address, &data_len);
@@ -284,8 +283,10 @@ void download_file(int data_sock, const char* filename) {
     while ((bytes_read = read(data_sock, buffer, BUFFER_SIZE)) > 0) {
         fwrite(buffer, 1, bytes_read, file);
     }
-    close(data_sock);
+
     fclose(file);
+    close(data_sock);
+   
 }
 
 bool file_exists(const char *filename) {

@@ -15,7 +15,7 @@ void loadUserfromfile();
 #define USERMAX 1024  // max number of users that can be read from file
 #define MAX_LENGTH 256
 
-#define CMD_PORT 9004
+#define CMD_PORT 9005
 #define BUFFER_SIZE 1024
 
 void handle_client(int cmd_sock , char buffer[BUFFER_SIZE]);
@@ -172,7 +172,6 @@ int main()
 	return 0;
 }
 
-
 void handle_client(int cmd_sock , char *buffer){
     struct sockaddr_in data_addr;
     int data_sock , data_port;
@@ -191,10 +190,13 @@ void handle_client(int cmd_sock , char *buffer){
             strcpy(filename,arg);
             char corResponse[BUFFER_SIZE] = "Valid User"; // If it is authenticated user
             send(cmd_sock, corResponse, sizeof(corResponse), 0);
+            send(cmd_sock, "200 PORT command successful\n", strlen("200 PORT command successful\n"), 0);
         }
         else{
           char corResponse[BUFFER_SIZE] = "530 Not logged in.";
           send(cmd_sock, corResponse, sizeof(corResponse), 0);
+      
+
         }
     }
     if (strcmp(cmd, "RETR") == 0) 
@@ -241,53 +243,53 @@ void handle_client(int cmd_sock , char *buffer){
       printf("Received QUIT command: %s\n", arg);
       char corResponse[BUFFER_SIZE] = "221 Service closing control connection\n";
       send(cmd_sock, corResponse, sizeof(corResponse), 0);
+      close(cmd_sock);
     }
     if(strcmp(cmd, "PORT") == 0) 
     {
-     
         if(isAuthenticated(cmd_sock)){
-           pid_t pid = fork();
+          
+           int ip1, ip2, ip3, ip4, p1, p2;
+           sscanf(arg, "%d,%d,%d,%d,%d,%d", &ip1, &ip2, &ip3, &ip4, &p1, &p2);
+           data_port = p1 * 256 + p2;        
+           listOfConnectedClients[cmd_sock].userDataport = data_port;
+      
+
+          pid_t pid = fork();
           if(pid == 0) {
-                  close(cmd_sock);
-                  printf("Received PORT command: %s\n", arg);
-                  int ip1, ip2, ip3, ip4, p1, p2;
-                  sscanf(arg, "%d,%d,%d,%d,%d,%d", &ip1, &ip2, &ip3, &ip4, &p1, &p2);
-                  data_port = p1 * 256 + p2;
-                
-                  listOfConnectedClients[cmd_sock].userDataport = data_port;
-                  // listOfConnectedClients[i].clientIPAddr = ipAdr;
-
-                  // Prepare data socket for connection
-                  data_sock = socket(AF_INET, SOCK_STREAM, 0);
-                  if (data_sock == 0) {
-                      perror("Data socket creation failed");   
-                  }
-
-                  data_addr.sin_family = AF_INET;
-                  data_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
-                  data_addr.sin_port = htons(data_port);
-
-                  if (connect(data_sock, (struct sockaddr*)&data_addr, sizeof(data_addr)) < 0) {
-                      perror("Data socket connect failed");
-                      close(data_sock);
-                    
-                  }
-                  printf("Data socked opened on port :%d\n",data_port);
-                  send(cmd_sock, "200 PORT command successful\n", strlen("200 PORT command successful\n"), 0);
-
-                  chdir(listOfConnectedClients[cmd_sock].currDir);
-                  if(isupload){
-                      handlefilestore(data_sock, filename); 
-                  }
-                  else{
-                      handlefileretrieve(data_sock, filename); 
-                  }
-                  printf("Data socked closed on port :%d\n",data_port);
-                  send(cmd_sock, "226 Transfer Completed \n", strlen("226 Transfer Completed \n"), 0);
+                close(cmd_sock);
+                printf("Received PORT command: %s\n", arg);
+                // Prepare data socket for connection
+                data_sock = socket(AF_INET, SOCK_STREAM, 0);
+                if (data_sock == 0) {
+                    perror("Data socket creation failed");   
                 }
-              else{
-                  close(data_sock);
-                  chdir(server_root); 
+
+                data_addr.sin_family = AF_INET;
+                data_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+                data_addr.sin_port = htons(data_port);
+
+                if (connect(data_sock, (struct sockaddr*)&data_addr, sizeof(data_addr)) < 0) {
+                    perror("Data socket connect failed");
+                    close(data_sock);
+                  
+                }
+                printf("Data socked opened on port :%d\n",data_port);
+               
+
+                chdir(listOfConnectedClients[cmd_sock].currDir);
+                if(isupload){
+                    handlefilestore(data_sock, filename); 
+                }
+                else{
+                    handlefileretrieve(data_sock, filename); 
+                }
+                printf("Data socked closed on port :%d\n",data_port);
+                send(cmd_sock, "226 Transfer Completed \n", strlen("226 Transfer Completed \n"), 0);
+              }
+              else{ // else if parent directory
+                close(data_sock);
+                chdir(server_root); 
               }
         }
     }
@@ -381,7 +383,6 @@ void handlefilestore(int data_sock, const char* filename) {
     while ((bytes_read = read(data_sock, buffer, BUFFER_SIZE)) > 0) {
          fwrite(buffer, 1, bytes_read, file);
     }
-  
     fclose(file);
 }
 
@@ -402,6 +403,7 @@ void handlefileretrieve(int data_sock, const char* filename) {
     
     fclose(file);
     close(data_sock);
+
 }
 
 void loadUserfromfile() {
